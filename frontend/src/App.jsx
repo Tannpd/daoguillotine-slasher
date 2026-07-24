@@ -32,6 +32,7 @@ export default function App() {
     contractBalance,
     loading,
     error,
+    txHash,
     txStatus,
     connectWallet,
     fetchPayrollsState,
