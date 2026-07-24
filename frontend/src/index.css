@@ -671,3 +671,128 @@ body {
   background: rgba(0, 240, 255, 0.04);
   box-shadow: 0 0 20px rgba(0, 240, 255, 0.08);
 }
+
+/* --- MODERN WEB3 LOADING MODAL --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(11, 14, 20, 0.88);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  animation: fadeIn 0.3s ease;
+}
+
+.loading-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  padding: 44px 36px;
+  max-width: 520px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 240, 255, 0.1);
+  position: relative;
+}
+
+.loading-spinner-box {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.animate-spin {
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinner-glow-ring {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--primary-cyan);
+  border-right-color: var(--emerald-success);
+  animation: spin 2s linear infinite reverse;
+}
+
+.loading-modal-title {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 800;
+  color: #FFF;
+  margin-bottom: 10px;
+}
+
+.loading-modal-status {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 22px;
+  margin-bottom: 24px;
+}
+
+.loading-steps-box {
+  background: #0D1017;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.loading-step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-color);
+}
+
+.step-dot.active {
+  background: var(--primary-cyan);
+  box-shadow: 0 0 8px var(--primary-cyan);
+  animation: pulse-dot 1s infinite alternate;
+}
+
+@keyframes pulse-dot {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.loading-tx-hash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--primary-cyan);
+  background: var(--primary-cyan-dim);
+  padding: 8px 12px;
+  border-radius: 8px;
+  word-break: break-all;
+}
+

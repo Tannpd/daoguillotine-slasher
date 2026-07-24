@@ -144,6 +144,47 @@ export default function App() {
         </div>
       </header>
 
+      {/* Modern Web3 Full-Screen Loading Modal Overlay */}
+      {loading && (
+        <div className="modal-overlay">
+          <div className="loading-modal-card">
+            <div className="loading-spinner-box">
+              <RefreshCw size={44} className="animate-spin" color="var(--primary-cyan)" />
+              <div className="spinner-glow-ring" />
+            </div>
+
+            <h3 className="loading-modal-title">
+              GenLayer AI Consensus in Progress
+            </h3>
+
+            <p className="loading-modal-status">
+              {txStatus || 'Writing transaction instructions to GenLayer Virtual Machine...'}
+            </p>
+
+            <div className="loading-steps-box">
+              <div className="loading-step-item">
+                <span className="step-dot active" />
+                <span>1. Scraping deliverables URL via gl.nondet.web.render</span>
+              </div>
+              <div className="loading-step-item">
+                <span className="step-dot active" />
+                <span>2. Executing LLM Tech Lead prompt for effort score</span>
+              </div>
+              <div className="loading-step-item">
+                <span className="step-dot active" />
+                <span>3. Re-executing validator nodes for spectrum consensus</span>
+              </div>
+            </div>
+
+            {txHash && (
+              <div className="loading-tx-hash">
+                <span>TX HASH:</span> {txHash}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* LANDING PAGE TAB */}
       {activeTab === 'LANDING' && (
         <div className="landing-wrapper">
