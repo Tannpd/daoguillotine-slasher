@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/rpc",
+      "destination": "https://studio.genlayer.com/api"
+    }
+  ]
+}

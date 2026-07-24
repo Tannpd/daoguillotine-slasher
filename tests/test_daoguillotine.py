@@ -1,0 +1,258 @@
+# =============================================================================
+#  test_daoguillotine.py - DAOGuillotine Contract Unit Test Suite
+# =============================================================================
+
+import sys
+import os
+import json
+import unittest
+import py_compile
+from unittest.mock import MagicMock
+
+# --- Mocking structure to simulate the GenLayer SDK runtime ------------------
+class MockContractBase:
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        for name, type_hint in getattr(cls, '__annotations__', {}).items():
+            if 'dict' in str(type_hint) or 'TreeMap' in str(type_hint):
+                setattr(instance, name, dict())
+        return instance
+
+class MockMessage:
+    def __init__(self, sender="0x1111111111111111111111111111111111111111", value=0):
+        self.sender_address = sender
+        self.value = value
+
+class MockWeb:
+    def __init__(self):
+        self.url_to_content = {}
+        self.fail_on_next = False
+    def render(self, url):
+        if self.fail_on_next:
+            raise Exception("Simulated report scrape failure")
+        if "404" in url:
+            raise Exception("404 Report Link Blocked")
+        if "empty" in url:
+            return ""
+        return self.url_to_content.get(url, "Scraped report: Implemented smart contract suite, written 100% unit tests, deployed frontend on Vercel.")
+
+class MockNondet:
+    def __init__(self):
+        self.web = MockWeb()
+        self.exec_prompt_responses = []
+        self.response_index = 0
+    def exec_prompt(self, prompt):
+        if self.exec_prompt_responses:
+            res = self.exec_prompt_responses[self.response_index % len(self.exec_prompt_responses)]
+            self.response_index += 1
+            if isinstance(res, Exception):
+                raise res
+            return res
+        return json.dumps({
+            "is_slashed": False,
+            "effort_score": 95,
+            "audit_report": "Excellent technical deliverables verified."
+        })
+
+class MockVM:
+    def run_nondet_unsafe(self, leader_fn, validator_fn):
+        leader_res = leader_fn()
+        valid = validator_fn(leader_res)
+        if not valid:
+            return json.dumps({"error": "VALIDATOR_REJECTED_CONSENSUS"})
+        return leader_res
+
+class MockContractRef:
+    def __init__(self, addr, tracker=None):
+        self.addr = str(addr)
+        self.tracker = tracker
+    def emit_transfer(self, value=0):
+        if self.tracker is not None:
+            self.tracker.append({"target": self.addr, "value": int(value)})
+        return True
+
+class MockGL:
+    def __init__(self):
+        self.Contract = MockContractBase
+        self.message = MockMessage()
+        self.nondet = MockNondet()
+        self.vm = MockVM()
+        self.transfers_log = []
+        self.public = MagicMock()
+        self.public.write = lambda f: f
+        self.public.write.payable = lambda f: f
+        self.public.view = lambda f: f
+    def get_contract_at(self, addr):
+        return MockContractRef(addr, self.transfers_log)
+
+class MockAddress:
+    def __init__(self, val):
+        self.val = str(val)
+    def __str__(self):
+        return self.val
+    def __repr__(self):
+        return f"Address('{self.val}')"
+
+mock_gl = MockGL()
+mock_gl.gl = mock_gl
+sys.modules['genlayer'] = mock_gl
+mock_gl.Contract = MockContractBase
+mock_gl.Address = MockAddress
+mock_gl.bigint = lambda v: int(v)
+mock_gl.TreeMap = dict
+
+# Add contracts directory to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../contracts')))
+import daoguillotine
+
+class TestDAOGuillotine(unittest.TestCase):
+    def setUp(self):
+        mock_gl.message = MockMessage(sender="0x1111111111111111111111111111111111111111", value=5000000000000000000)
+        mock_gl.nondet = MockNondet()
+        mock_gl.transfers_log = []
+        self.contract = daoguillotine.Contract()
+
+    def test_reproducible_compilation(self):
+        """Verify contract file syntax and compilation."""
+        contract_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../contracts/daoguillotine.py'))
+        compiled_file = py_compile.compile(contract_path, doraise=True)
+        self.assertTrue(os.path.exists(compiled_file))
+
+    def test_create_payroll_payable_deposit(self):
+        """Verify create_payroll attaches value and locks salary deposit in escrow."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=5000000000000000000)
+
+        pid = self.contract.create_payroll(contributor)
+        self.assertEqual(pid, 0)
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        self.assertEqual(payroll["id"], 0)
+        self.assertEqual(payroll["dao"], dao)
+        self.assertEqual(payroll["contributor"], contributor)
+        self.assertEqual(payroll["amount"], 5000000000000000000)
+        self.assertEqual(payroll["status"], "ACTIVE")
+        self.assertEqual(self.contract.get_payrolls_count(), 1)
+
+    def test_request_salary_contributor_payment_success(self):
+        """Verify solid work report approves salary and triggers emit_transfer to contributor."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=3000000000000000000)
+        self.contract.create_payroll(contributor)
+
+        mock_gl.nondet.web.url_to_content["https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt"] = \
+            "Tangible deliverables: Built smart contracts, wrote unit tests, deployed web app."
+
+        mock_gl.nondet.exec_prompt_responses = [
+            json.dumps({
+                "is_slashed": False,
+                "effort_score": 90,
+                "audit_report": "High tangible output verified. Full salary authorized."
+            })
+        ]
+
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt")
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        self.assertFalse(payroll["is_slashed"])
+        self.assertEqual(payroll["effort_score"], 90)
+        self.assertEqual(payroll["status"], "PAID")
+        self.assertEqual(payroll["amount"], 0)
+        self.assertTrue(any(t["target"] == contributor and t["value"] == 3000000000000000000 for t in mock_gl.transfers_log))
+
+    def test_request_salary_dao_refund_slashed(self):
+        """Verify fluff/meeting spam report slashes salary and refunds GEN back to DAO treasury."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=4000000000000000000)
+        self.contract.create_payroll(contributor)
+
+        mock_gl.nondet.web.url_to_content["https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt"] = \
+            "Work report: Attended 5 sync meetings, tweeted GM, talked in Telegram."
+
+        mock_gl.nondet.exec_prompt_responses = [
+            json.dumps({
+                "is_slashed": True,
+                "effort_score": 10,
+                "audit_report": "Corporate fluff and meeting spam detected. Salary slashed."
+            })
+        ]
+
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt")
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        self.assertTrue(payroll["is_slashed"])
+        self.assertEqual(payroll["effort_score"], 10)
+        self.assertEqual(payroll["status"], "SLASHED")
+        self.assertEqual(payroll["amount"], 0)
+        self.assertTrue(any(t["target"] == dao and t["value"] == 4000000000000000000 for t in mock_gl.transfers_log))
+
+    def test_request_salary_access_control_unauthorized(self):
+        """Verify unauthorized third party cannot trigger salary audit."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
+        self.contract.create_payroll(contributor)
+
+        mock_gl.message = MockMessage(sender="0x9999999999999999999999999999999999999999")
+
+        with self.assertRaises(Exception) as ctx:
+            self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt")
+        self.assertIn("Only the designated contributor or DAO admin can request salary audit", str(ctx.exception))
+
+    def test_strict_boolean_validation_rejects_string_boolean(self):
+        """Verify string boolean 'false' or 'true' in LLM output is rejected as non-boolean."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
+        self.contract.create_payroll(contributor)
+
+        mock_gl.nondet.web.url_to_content["https://fake-report.com/work"] = "Report content"
+
+        # LLM returns string "false" instead of boolean false
+        mock_gl.nondet.exec_prompt_responses = [
+            json.dumps({
+                "is_slashed": "false",
+                "effort_score": 80,
+                "audit_report": "Fake string response"
+            })
+        ]
+
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.request_salary(0, "https://fake-report.com/work")
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        # Contract MUST fail closed and set status to FAILED
+        self.assertEqual(payroll["status"], "FAILED")
+
+    def test_validator_rerun_scrape_failure_rejects_consensus(self):
+        """Verify validator rerun scrape failure returns False and rejects consensus."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
+        self.contract.create_payroll(contributor)
+
+        mock_gl.nondet.web.fail_on_next = True
+
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.request_salary(0, "https://flaky-server.com/report")
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        self.assertEqual(payroll["status"], "FAILED")
+
+if __name__ == '__main__':
+    unittest.main()

@@ -407,33 +407,71 @@ export default function App() {
                         <div style={{ marginTop: '30px', borderTop: '2px dashed var(--steel-gray)', paddingTop: '20px' }}>
                           {selectedPayroll.status === 'ACTIVE' ? (
                             <div>
-                              {address.toLowerCase() === selectedPayroll.contributor.toLowerCase() ? (
+                              {(address.toLowerCase() === selectedPayroll.contributor.toLowerCase() || address.toLowerCase() === selectedPayroll.dao.toLowerCase()) ? (
                                 <div>
                                   <div style={{ background: 'rgba(0, 229, 255, 0.05)', border: '1px solid var(--corp-blue-dim)', padding: '12px', borderRadius: '4px', fontSize: '11px', color: '#a5f3fc', marginBottom: '16px' }}>
-                                    ROLE RECOGNIZED // Contributor. Submit your work proof URL below to trigger auditing.
+                                    ROLE RECOGNIZED // {address.toLowerCase() === selectedPayroll.contributor.toLowerCase() ? "Contributor" : "DAO Admin"}. Submit work proof URL below to trigger auditing.
                                   </div>
+
+                                  {/* QUICK TEST FILL BUTTONS */}
+                                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                                    <button
+                                      type="button"
+                                      style={{
+                                        background: 'rgba(0, 229, 255, 0.15)',
+                                        border: '1px solid rgba(0, 229, 255, 0.4)',
+                                        color: '#a5f3fc',
+                                        fontSize: '11px',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontFamily: 'monospace'
+                                      }}
+                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt')}
+                                    >
+                                      + Fill Solid Work Report (Payout)
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      style={{
+                                        background: 'rgba(239, 68, 68, 0.15)',
+                                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                                        color: '#fca5a5',
+                                        fontSize: '11px',
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontFamily: 'monospace'
+                                      }}
+                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt')}
+                                    >
+                                      + Fill Fluff Meetings Report (Slash & Refund DAO)
+                                    </button>
+                                  </div>
+
                                   <form onSubmit={handleRequestSalary} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     <div className="terminal-input-group" style={{ marginBottom: '10px' }}>
                                       <label className="terminal-label" style={{ fontSize: '12px' }}>WORK PROOF URL (GitHub Gist, Notion Doc, Blog Post)</label>
                                       <input 
-                                        type="url" 
-                                        placeholder="https://gist.github.com/developer/proof-of-work" 
-                                        value={workProofUrlInput}
+                                        type="text" 
+                                        placeholder="https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt" 
+                                        value={workProofUrlInput || 'https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt'}
                                         onChange={(e) => setWorkProofUrlInput(e.target.value)}
                                         className="terminal-input"
                                         required
                                       />
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                      <button type="submit" className="terminal-btn terminal-btn-slash" style={{ width: '100%' }}>
-                                        TRIGGER AUDIT & CLAIM PAYOUT
+                                      <button type="submit" className="terminal-btn terminal-btn-slash" style={{ width: '100%' }} disabled={loading}>
+                                        {loading ? 'AUDITING...' : 'TRIGGER AUDIT & CLAIM PAYOUT'}
                                       </button>
                                     </div>
                                   </form>
                                 </div>
                               ) : (
                                 <div style={{ color: 'var(--steel-light)', fontSize: '12px', textAlign: 'center', padding: '16px', background: '#090909', border: '1px solid var(--steel-gray)' }}>
-                                  Awaiting contributor claim. Only address {selectedPayroll.contributor.slice(0, 10)}... can initiate audit.
+                                  Awaiting contributor or DAO claim. Connected wallet is not a recognized party for this payroll.
                                 </div>
                               )}
                             </div>

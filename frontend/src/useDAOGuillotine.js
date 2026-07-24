@@ -4,17 +4,33 @@ import { studionet } from 'genlayer-js/chains';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || '';
 
+// Custom chain that proxies RPC through Vercel same-origin to bypass browser CORS policies
+const getRpcEndpoint = () => {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `${window.location.origin}/api/rpc`;
+  }
+  return 'https://studio.genlayer.com/api';
+};
+
+const customStudionet = {
+  ...studionet,
+  rpcUrls: {
+    default: { http: [getRpcEndpoint()] },
+    public: { http: [getRpcEndpoint()] },
+  }
+};
+
 let _readClient = null;
 
 function getReadClient() {
   if (!_readClient) {
-    _readClient = createClient({ chain: studionet });
+    _readClient = createClient({ chain: customStudionet });
   }
   return _readClient;
 }
 
 function getWriteClient(account) {
-  return createClient({ chain: studionet, account });
+  return createClient({ chain: customStudionet, account });
 }
 
 // Convert Wei (u256) to human readable GEN string
