@@ -4,17 +4,20 @@ import {
   formatGen 
 } from './useDAOGuillotine';
 import { 
-  ShieldAlert, 
-  Terminal, 
-  User, 
-  Link, 
+  ShieldCheck, 
+  Wallet, 
+  PlusCircle, 
+  FolderOpen, 
   Lock, 
-  Slash, 
+  CheckCircle2, 
+  AlertCircle, 
   FileText, 
-  Skull, 
-  Briefcase,
-  AlertOctagon,
-  Scale
+  ExternalLink,
+  Coins,
+  TrendingUp,
+  Scale,
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 
 export default function App() {
@@ -42,9 +45,6 @@ export default function App() {
   const [amountInput, setAmountInput] = useState('5.0');
   const [workProofUrlInput, setWorkProofUrlInput] = useState('');
 
-  // Slashed animation trigger states
-  const [triggerSlashAnim, setTriggerSlashAnim] = useState(false);
-
   const selectedPayroll = payrolls.find(p => Number(p.id) === Number(selectedPayrollId));
 
   // Auto select first payroll
@@ -54,21 +54,6 @@ export default function App() {
     }
   }, [activeTab, payrolls, selectedPayrollId]);
 
-  // Watch for audit changes to trigger animation
-  useEffect(() => {
-    if (selectedPayroll) {
-      if (selectedPayroll.status === 'SLASHED') {
-        setTriggerSlashAnim(true);
-        const timer = setTimeout(() => {
-          setTriggerSlashAnim(false);
-        }, 1000);
-        return () => clearTimeout(timer);
-      } else {
-        setTriggerSlashAnim(false);
-      }
-    }
-  }, [selectedPayrollId, selectedPayroll?.status]);
-
   const handleCreatePayroll = async (e) => {
     e.preventDefault();
     if (!contributorInput || !amountInput) return;
@@ -77,7 +62,7 @@ export default function App() {
       setContributorInput('');
       setAmountInput('5.0');
       setActiveTab('CABINET');
-      setSelectedPayrollId(0); // View newest
+      setSelectedPayrollId(0);
     } catch (err) {
       console.error(err);
     }
@@ -94,423 +79,381 @@ export default function App() {
     }
   };
 
-  // Render value extraction meter segments
-  const renderMeter = (score, isSlashed) => {
-    const totalSegments = 20;
-    const filledSegments = Math.round((Number(score) / 100) * totalSegments);
-    const segments = [];
-    for (let i = 0; i < totalSegments; i++) {
-      const isFilled = i < filledSegments;
-      let segmentClass = '';
-      if (isFilled) {
-        segmentClass = isSlashed ? 'filled-low' : 'filled-high';
-      }
-      segments.push(
-        <div key={i} className={`meter-segment ${segmentClass}`} />
-      );
-    }
-    return segments;
-  };
+  // Compute stat summary metrics
+  const paidCount = payrolls.filter(p => p.status === 'PAID').length;
+  const slashedCount = payrolls.filter(p => p.status === 'SLASHED').length;
+  const activeCount = payrolls.filter(p => p.status === 'ACTIVE').length;
 
   return (
-    <div className={`terminal-container ${triggerSlashAnim ? 'slash-screen-shake slash-screen-flash' : ''}`}>
-      {/* Loading overlay */}
-      {loading && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 200, border: '4px solid var(--blood-red)' }}>
-          <Skull size={80} color="var(--blood-red)" style={{ animation: 'pulse-badge 1s infinite alternate' }} />
-          <h2 style={{ fontFamily: 'var(--font-title)', fontSize: '32px', color: '#fff', marginTop: '24px', letterSpacing: '2px' }}>
-            [ EXECUTION IN PROGRESS ]
-          </h2>
-          <p style={{ color: 'var(--steel-light)', marginTop: '12px', fontSize: '13px', maxWidth: '600px', textAlign: 'center', fontFamily: 'var(--font-mono)', padding: '0 20px' }}>
-            {txStatus || 'Writing instructions to the GenLayer virtual machine...'}
-          </p>
-          {txHash && (
-            <div style={{ marginTop: '20px', fontSize: '11px', color: 'var(--corp-blue)', fontFamily: 'var(--font-mono)' }}>
-              TX_HASH: {txHash}
+    <div className="app-container">
+      {/* Top Navbar */}
+      <header className="navbar">
+        <div className="brand-logo">
+          <div className="brand-icon-box">
+            <Scale size={24} />
+          </div>
+          <div>
+            <div className="brand-title">DAOGuillotine</div>
+            <div className="brand-subtitle">AI Contributor Audit & Escrow Protocol (GenLayer v0.2.16)</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ background: '#111622', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '6px 14px', fontSize: '12px', color: 'var(--primary-cyan)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
+            StudioNet Connected
+          </div>
+
+          {address ? (
+            <div style={{ background: 'var(--primary-cyan-dim)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '10px', padding: '8px 16px', color: '#FFF', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Wallet size={16} color="var(--primary-cyan)" />
+              {address.slice(0, 6)}...{address.slice(-4)}
             </div>
+          ) : (
+            <button onClick={connectWallet} className="btn-primary" style={{ width: 'auto', padding: '10px 20px', fontSize: '14px' }}>
+              <Wallet size={16} />
+              Connect Wallet
+            </button>
           )}
         </div>
-      )}
+      </header>
 
-      {/* caution banners */}
-      <div className="caution-banner" />
-
-      <div className="terminal-frame">
-        {/* Header */}
-        <header className="terminal-header">
-          <div>
-            <div className="terminal-title">
-              <Skull size={36} color="var(--blood-red)" />
-              <span>DAO GUILLOTINE</span>
-            </div>
-            <div style={{ color: 'var(--steel-light)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', marginTop: '4px' }}>
-              Contributor Slasher // Fluff Audit Protocol v0.2.16
-            </div>
+      {/* Stats Overview Bar */}
+      <div className="stat-grid">
+        <div className="stat-card">
+          <div className="stat-header">
+            <span>TOTAL PAYROLLS</span>
+            <FolderOpen size={16} color="var(--primary-cyan)" />
           </div>
+          <div className="stat-value">{payrolls.length}</div>
+        </div>
 
-          <div>
-            {address ? (
-              <div style={{ background: '#111', border: '2px solid var(--steel-gray)', padding: '8px 16px', color: 'var(--corp-blue)', fontSize: '12px' }}>
-                LOGGED_AS // {address.slice(0, 8)}...{address.slice(-8)}
+        <div className="stat-card">
+          <div className="stat-header">
+            <span>ACTIVE ESCROW BALANCE</span>
+            <Coins size={16} color="var(--primary-cyan)" />
+          </div>
+          <div className="stat-value" style={{ color: 'var(--primary-cyan)' }}>
+            {formatGen(contractBalance)} GEN
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-header">
+            <span>DISBURSED (PAID)</span>
+            <CheckCircle2 size={16} color="var(--emerald-success)" />
+          </div>
+          <div className="stat-value" style={{ color: 'var(--emerald-success)' }}>{paidCount}</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-header">
+            <span>SLASHED & REFUNDED</span>
+            <AlertCircle size={16} color="var(--rose-slash)" />
+          </div>
+          <div className="stat-value" style={{ color: 'var(--rose-slash)' }}>{slashedCount}</div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main>
+        {/* Navigation Tabs */}
+        <div className="tabs-header">
+          <button 
+            onClick={() => setActiveTab('CREATE_PAYROLL')}
+            className={`tab-btn ${activeTab === 'CREATE_PAYROLL' ? 'active' : ''}`}
+          >
+            <PlusCircle size={18} />
+            Create Escrow Bounty
+          </button>
+          <button 
+            onClick={() => {
+              setActiveTab('CABINET');
+              fetchPayrollsState();
+            }}
+            className={`tab-btn ${activeTab === 'CABINET' ? 'active' : ''}`}
+          >
+            <FolderOpen size={18} />
+            Dossier Repository ({payrolls.length})
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ background: 'var(--rose-dim)', border: '1px solid rgba(244, 63, 94, 0.4)', borderRadius: '12px', padding: '16px 20px', color: '#FDA4AF', fontSize: '13px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertCircle size={18} color="var(--rose-slash)" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Tab 1: CREATE_PAYROLL */}
+        {activeTab === 'CREATE_PAYROLL' && (
+          <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+            <div className="glass-panel">
+              <div className="panel-title">
+                <Lock size={22} color="var(--primary-cyan)" />
+                Deposit & Lock Contributor Bounty
               </div>
-            ) : (
-              <button onClick={connectWallet} className="terminal-btn" style={{ borderColor: 'var(--corp-blue)', color: 'var(--corp-blue)' }}>
-                INITIATE INTERACTION
-              </button>
-            )}
-          </div>
-        </header>
+              <p className="panel-desc">
+                DAO locks native GEN tokens in escrow for a specified contributor. Funds remain securely locked until audited by GenLayer AI.
+              </p>
 
-        {/* Auth prompt */}
-        {!address ? (
-          <div style={{ textAlign: 'center', padding: '80px 20px', background: '#090909' }}>
-            <ShieldAlert size={60} color="var(--blood-red)" style={{ margin: '0 auto 20px auto' }} />
-            <h2 style={{ fontFamily: 'var(--font-title)', fontSize: '32px', color: '#fff', marginBottom: '12px', letterSpacing: '1px' }}>
-              AUTHENTICATION REQUISITE
-            </h2>
-            <p style={{ color: 'var(--steel-light)', maxWidth: '500px', margin: '0 auto 30px auto', fontSize: '13px', lineHeight: '20px' }}>
-              Load MetaMask or your GenLayer Studio browser environment to audit developer work metrics and release bounty assets.
-            </p>
-            <button onClick={connectWallet} className="terminal-btn">
-              CONNECT ACCESS KEY
-            </button>
-          </div>
-        ) : (
-          <div>
-            {/* Tabs */}
-            <div className="terminal-tabs">
-              <button 
-                onClick={() => setActiveTab('CREATE_PAYROLL')}
-                className={`terminal-tab ${activeTab === 'CREATE_PAYROLL' ? 'active' : ''}`}
-              >
-                [+] ESCROW BOUNTY
-              </button>
-              <button 
-                onClick={() => {
-                  setActiveTab('CABINET');
-                  fetchPayrollsState();
-                }}
-                className={`terminal-tab ${activeTab === 'CABINET' ? 'active' : ''}`}
-              >
-                📁 CASE REPOSITORY ({payrolls.length})
-              </button>
-            </div>
-
-            {/* Contract status info */}
-            <div className="terminal-meta-bar">
-              <div>ACTIVE CONTRACT BALANCE: {formatGen(contractBalance)} GEN</div>
-              <div>STUDIONET ADDR: {contractAddress || 'No Address'}</div>
-            </div>
-
-            <div style={{ padding: '30px' }}>
-              {error && (
-                <div style={{ background: 'rgba(255, 0, 60, 0.08)', border: '2px solid var(--blood-red)', padding: '16px', color: '#ffa3b1', fontSize: '12px', marginBottom: '24px' }}>
-                  <span style={{ fontWeight: 'bold' }}>SYSTEM ERROR //</span> {error}
+              <form onSubmit={handleCreatePayroll}>
+                <div className="form-group">
+                  <label className="form-label">CONTRIBUTOR RECIPIENT ADDRESS</label>
+                  <input 
+                    type="text" 
+                    placeholder="0x90F8bf651d130c507982e1cfd84d12A9c0fFd2Ef" 
+                    value={contributorInput}
+                    onChange={(e) => setContributorInput(e.target.value)}
+                    className="form-input"
+                    required
+                  />
                 </div>
-              )}
 
-              {/* TAB CONTENT: CREATE_PAYROLL */}
-              {activeTab === 'CREATE_PAYROLL' && (
-                <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-                  <div className="module-panel">
-                    <h3 className="module-title">
-                      <Lock size={18} color="var(--corp-blue)" />
-                      LOCK CONTRIBUTOR BOUNTY
-                    </h3>
-                    <p style={{ color: 'var(--steel-light)', fontSize: '12px', marginBottom: '24px', lineHeight: '18px' }}>
-                      Locks payment assets in escrow for a designated developer address. Funds are held until audited.
-                    </p>
-
-                    <form onSubmit={handleCreatePayroll}>
-                      <div className="terminal-input-group">
-                        <label className="terminal-label">CONTRIBUTOR ADDRESS</label>
-                        <input 
-                          type="text" 
-                          placeholder="0x90F8bf651d130c507982e1cfd84d12A9c0fFd2Ef" 
-                          value={contributorInput}
-                          onChange={(e) => setContributorInput(e.target.value)}
-                          className="terminal-input"
-                          required
-                        />
-                      </div>
-
-                      <div className="terminal-input-group">
-                        <label className="terminal-label">PAYROLL VALUE (GEN)</label>
-                        <input 
-                          type="number" 
-                          step="0.001" 
-                          min="0.001"
-                          placeholder="5.0" 
-                          value={amountInput}
-                          onChange={(e) => setAmountInput(e.target.value)}
-                          className="terminal-input"
-                          required
-                        />
-                      </div>
-
-                      <div style={{ textAlign: 'right', marginTop: '30px' }}>
-                        <button type="submit" className="terminal-btn">
-                          ESCROW BOUNTY LOCK
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+                <div className="form-group">
+                  <label className="form-label">SALARY AMOUNT TO LOCK (GEN)</label>
+                  <input 
+                    type="number" 
+                    step="0.001" 
+                    min="0.001"
+                    placeholder="5.0" 
+                    value={amountInput}
+                    onChange={(e) => setAmountInput(e.target.value)}
+                    className="form-input"
+                    required
+                  />
                 </div>
-              )}
 
-              {/* TAB CONTENT: CABINET */}
-              {activeTab === 'CABINET' && (
-                <div style={{ display: 'grid', gridTemplateColumns: payrolls.length > 0 ? '320px 1fr' : '1fr', gap: '30px' }}>
-                  
-                  {/* CABINET SIDEBAR */}
-                  {payrolls.length > 0 ? (
-                    <div className="cabinet-sidebar">
-                      <h4 style={{ fontFamily: 'var(--font-title)', fontSize: '18px', color: 'var(--steel-light)', borderBottom: '2px solid var(--steel-gray)', paddingBottom: '10px', marginBottom: '16px' }}>
-                        FILES
-                      </h4>
-                      <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                        {payrolls.map((payroll) => {
-                          const isSlashed = payroll.status === 'SLASHED';
-                          const isPaid = payroll.status === 'PAID';
-                          
-                          let statusClass = 'badge-active';
-                          if (isSlashed) statusClass = 'badge-slashed';
-                          if (isPaid) statusClass = 'badge-paid';
-
-                          return (
-                            <div 
-                              key={payroll.id}
-                              className={`cabinet-card ${Number(selectedPayrollId) === Number(payroll.id) ? 'selected' : ''}`}
-                              onClick={() => setSelectedPayrollId(payroll.id)}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                <span style={{ fontFamily: 'var(--font-title)', fontSize: '18px' }}>
-                                  CASE #{payroll.id}
-                                </span>
-                                <span className={`badge-status ${statusClass}`}>
-                                  {payroll.status}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: '11px', color: 'var(--steel-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                DEV: {payroll.contributor.slice(0, 14)}...
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
-                                <span style={{ fontSize: '12px', color: 'var(--corp-blue)', fontWeight: 'bold' }}>
-                                  {formatGen(payroll.amount)} GEN
-                                </span>
-                                {payroll.effort_score > 0 && (
-                                  <span style={{ fontSize: '10px', color: 'var(--steel-light)' }}>
-                                    EFFORT: {payroll.effort_score}%
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                <button type="submit" className="btn-primary" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      Creating Payroll Escrow...
+                    </>
                   ) : (
-                    <div style={{ textAlign: 'center', padding: '60px 0', border: '2px dashed var(--steel-gray)' }}>
-                      <Briefcase size={40} color="var(--steel-light)" style={{ margin: '0 auto 16px auto' }} />
-                      <p style={{ color: 'var(--steel-light)' }}>NO SALARY RECORDS ACTIVE</p>
-                    </div>
+                    <>
+                      <PlusCircle size={18} />
+                      Lock Bounty & Create Dossier
+                    </>
                   )}
-
-                  {/* ACTIVE CRT VIEW */}
-                  {selectedPayroll && (
-                    <div className="module-panel" style={{ padding: '0px', background: 'transparent', border: 'none' }}>
-                      <div className="crt-screen crt-console">
-                        
-                        {/* Audit Stamp overlay */}
-                        {selectedPayroll.status === 'SLASHED' && (
-                          <div className="stamp-slashed-banner">
-                            [ EFFORT REJECTED - FUNDS SLASHED ]
-                          </div>
-                        )}
-                        {selectedPayroll.status === 'PAID' && (
-                          <div className="stamp-paid-banner">
-                            [ COMPLIANT - SALARY DISBURSED ]
-                          </div>
-                        )}
-
-                        <h3 className="module-title" style={{ color: '#fff', borderColor: 'var(--steel-gray)' }}>
-                          PAYROLL DOSSIER DETAILS
-                        </h3>
-
-                        <div className="crt-status-row">
-                          <div className="crt-label-cell">CASE REF:</div>
-                          <div>#000{selectedPayroll.id}</div>
-                        </div>
-
-                        <div className="crt-status-row">
-                          <div className="crt-label-cell">DAO SOURCE:</div>
-                          <div style={{ fontSize: '12px' }}>{selectedPayroll.dao}</div>
-                        </div>
-
-                        <div className="crt-status-row">
-                          <div className="crt-label-cell">CONTRIBUTOR:</div>
-                          <div style={{ fontSize: '12px' }}>{selectedPayroll.contributor}</div>
-                        </div>
-
-                        <div className="crt-status-row">
-                          <div className="crt-label-cell">ESCROW SUM:</div>
-                          <div style={{ fontSize: '16px', color: 'var(--corp-blue)', fontWeight: 'bold' }}>
-                            {formatGen(selectedPayroll.amount)} GEN
-                          </div>
-                        </div>
-
-                        {/* Effort meter */}
-                        {selectedPayroll.effort_score > 0 && (
-                          <div className="meter-container">
-                            <div className="meter-label">
-                              <span>PRODUCTIVITY GAUGED VALUE</span>
-                              <span>{selectedPayroll.effort_score}% EFFORT SCORE</span>
-                            </div>
-                            <div className="meter-track">
-                              {renderMeter(selectedPayroll.effort_score, selectedPayroll.is_slashed)}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Audit report display */}
-                        {selectedPayroll.audit_report && (
-                          <div style={{ background: '#111', border: '1px solid var(--steel-gray)', padding: '16px', marginTop: '20px' }}>
-                            <div style={{ color: 'var(--blood-red)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <Terminal size={12} /> SYSTEM LOG: AUDITOR DECREE
-                            </div>
-                            <div style={{ fontStyle: 'italic', fontSize: '13px', lineHeight: '20px' }}>
-                              "{selectedPayroll.audit_report}"
-                            </div>
-                            {selectedPayroll.work_proof_url && (
-                              <div style={{ marginTop: '12px', fontSize: '11px', borderTop: '1px dashed var(--steel-gray)', paddingTop: '8px' }}>
-                                <span style={{ color: 'var(--steel-light)' }}>SUBMITTED EVIDENCE: </span>
-                                <a 
-                                  href={selectedPayroll.work_proof_url} 
-                                  target="_blank" 
-                                  rel="noreferrer" 
-                                  style={{ color: 'var(--corp-blue)', textDecoration: 'underline' }}
-                                >
-                                  {selectedPayroll.work_proof_url}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
-                        <div style={{ marginTop: '30px', borderTop: '2px dashed var(--steel-gray)', paddingTop: '20px' }}>
-                          {selectedPayroll.status === 'ACTIVE' ? (
-                            <div>
-                              {(address.toLowerCase() === selectedPayroll.contributor.toLowerCase() || address.toLowerCase() === selectedPayroll.dao.toLowerCase()) ? (
-                                <div>
-                                  <div style={{ background: 'rgba(0, 229, 255, 0.05)', border: '1px solid var(--corp-blue-dim)', padding: '12px', borderRadius: '4px', fontSize: '11px', color: '#a5f3fc', marginBottom: '16px' }}>
-                                    ROLE RECOGNIZED // {address.toLowerCase() === selectedPayroll.contributor.toLowerCase() ? "Contributor" : "DAO Admin"}. Submit work proof URL below to trigger auditing.
-                                  </div>
-
-                                  {/* QUICK TEST FILL BUTTONS */}
-                                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                                    <button
-                                      type="button"
-                                      style={{
-                                        background: 'rgba(0, 229, 255, 0.15)',
-                                        border: '1px solid rgba(0, 229, 255, 0.4)',
-                                        color: '#a5f3fc',
-                                        fontSize: '11px',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        fontFamily: 'monospace'
-                                      }}
-                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt')}
-                                    >
-                                      + Fill Solid Work Report (Payout)
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      style={{
-                                        background: 'rgba(239, 68, 68, 0.15)',
-                                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                                        color: '#fca5a5',
-                                        fontSize: '11px',
-                                        padding: '4px 8px',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        fontFamily: 'monospace'
-                                      }}
-                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt')}
-                                    >
-                                      + Fill Fluff Meetings Report (Slash & Refund DAO)
-                                    </button>
-                                  </div>
-
-                                  <form onSubmit={handleRequestSalary} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <div className="terminal-input-group" style={{ marginBottom: '10px' }}>
-                                      <label className="terminal-label" style={{ fontSize: '12px' }}>WORK PROOF URL (GitHub Gist, Notion Doc, Blog Post)</label>
-                                      <input 
-                                        type="text" 
-                                        placeholder="https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt" 
-                                        value={workProofUrlInput || 'https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt'}
-                                        onChange={(e) => setWorkProofUrlInput(e.target.value)}
-                                        className="terminal-input"
-                                        required
-                                      />
-                                    </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <button type="submit" className="terminal-btn terminal-btn-slash" style={{ width: '100%' }} disabled={loading}>
-                                        {loading ? 'AUDITING...' : 'TRIGGER AUDIT & CLAIM PAYOUT'}
-                                      </button>
-                                    </div>
-                                  </form>
-                                </div>
-                              ) : (
-                                <div style={{ color: 'var(--steel-light)', fontSize: '12px', textAlign: 'center', padding: '16px', background: '#090909', border: '1px solid var(--steel-gray)' }}>
-                                  Awaiting contributor or DAO claim. Connected wallet is not a recognized party for this payroll.
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', border: '1px solid var(--steel-gray)', color: 'var(--steel-light)', textAlign: 'center', fontSize: '12px' }}>
-                              Dossier Locked. Final state achieved. Payout settled or confiscated.
-                            </div>
-                          )}
-                        </div>
-
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-              )}
-
+                </button>
+              </form>
             </div>
           </div>
         )}
 
-        {/* Footer monitor */}
-        <footer style={{ background: '#080808', borderTop: '4px solid var(--steel-gray)', padding: '20px 30px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-title)', fontSize: '16px', color: '#fff', marginBottom: '8px' }}>
-                HR AUDIT SUB-PROCESSOR
+        {/* Tab 2: CABINET / REPOSITORY */}
+        {activeTab === 'CABINET' && (
+          <div>
+            {payrolls.length === 0 ? (
+              <div className="glass-panel" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <FolderOpen size={48} color="var(--text-dim)" style={{ margin: '0 auto 16px auto' }} />
+                <h3 style={{ fontSize: '18px', color: '#FFF', marginBottom: '8px' }}>No Payroll Dossiers Found</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                  Create your first payroll bounty in the "Create Escrow Bounty" tab.
+                </p>
+                <button onClick={() => setActiveTab('CREATE_PAYROLL')} className="btn-primary" style={{ width: 'auto' }}>
+                  Create First Payroll
+                </button>
               </div>
-              <p style={{ fontSize: '11px', color: 'var(--steel-light)', lineHeight: '16px' }}>
-                Guillotine scans contribution logs in distributed nodes. Validates core slashing outcomes via consensus. Fluff score below 50% triggers total refund to the DAO treasury.
-              </p>
-            </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px' }}>
+                {/* Dossiers List Sidebar */}
+                <div className="dossier-list">
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '4px', textTransform: 'uppercase' }}>
+                    SELECT DOSSIER ({payrolls.length})
+                  </div>
 
-            <div>
-              <div className="crt-monitor-log">
-                <div className="crt-log-line">&gt; Initiating DAOGuillotine security framework... [ACTIVE]</div>
-                <div className="crt-log-line">&gt; Listening on GenLayer StudioNet contract listener.</div>
-                {txStatus && <div className="crt-log-line" style={{ color: 'var(--corp-blue)' }}>&gt; [SYSTEM STATUS] {txStatus}</div>}
-                {txHash && <div className="crt-log-line">&gt; [TX TRANSMITTED] {txHash}</div>}
-                <div className="crt-log-line">&gt; Execution pool online. Awaiting task inputs.</div>
+                  {payrolls.map((p) => (
+                    <div 
+                      key={p.id}
+                      onClick={() => setSelectedPayrollId(p.id)}
+                      className={`dossier-item ${Number(selectedPayrollId) === Number(p.id) ? 'selected' : ''}`}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: 700, color: '#FFF' }}>
+                          Case #{p.id}
+                        </span>
+                        <span className={`badge ${p.status === 'PAID' ? 'badge-paid' : p.status === 'SLASHED' ? 'badge-slashed' : 'badge-active'}`}>
+                          {p.status}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        Contributor: {p.contributor.slice(0, 6)}...{p.contributor.slice(-4)}
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary-cyan)', marginTop: '4px' }}>
+                        {formatGen(p.amount)} GEN
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Selected Dossier Details */}
+                <div>
+                  {selectedPayroll && (
+                    <div className="glass-panel">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>DOSSIER REFERENCE</div>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 800, color: '#FFF' }}>
+                            Case #{selectedPayroll.id}
+                          </div>
+                        </div>
+
+                        <span className={`badge ${selectedPayroll.status === 'PAID' ? 'badge-paid' : selectedPayroll.status === 'SLASHED' ? 'badge-slashed' : 'badge-active'}`} style={{ fontSize: '14px', padding: '8px 18px' }}>
+                          {selectedPayroll.status === 'PAID' && <CheckCircle2 size={16} />}
+                          {selectedPayroll.status === 'SLASHED' && <AlertCircle size={16} />}
+                          {selectedPayroll.status === 'ACTIVE' && <Sparkles size={16} />}
+                          {selectedPayroll.status}
+                        </span>
+                      </div>
+
+                      {/* Detail Info Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                        <div style={{ background: '#0D1017', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>DAO SOURCE (ESCROW OWNER)</div>
+                          <div style={{ fontSize: '12px', color: '#FFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{selectedPayroll.dao}</div>
+                        </div>
+
+                        <div style={{ background: '#0D1017', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>CONTRIBUTOR RECIPIENT</div>
+                          <div style={{ fontSize: '12px', color: '#FFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{selectedPayroll.contributor}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'var(--primary-cyan-dim)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>LOCKED ESCROW AMOUNT</span>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 800, color: 'var(--primary-cyan)' }}>
+                          {formatGen(selectedPayroll.amount)} GEN
+                        </span>
+                      </div>
+
+                      {/* Progress Gauge */}
+                      {selectedPayroll.effort_score > 0 && (
+                        <div style={{ marginBottom: '24px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
+                            <span>AI PRODUCTIVITY GAUGED VALUE</span>
+                            <span style={{ color: selectedPayroll.is_slashed ? 'var(--rose-slash)' : 'var(--emerald-success)' }}>
+                              {selectedPayroll.effort_score}% EFFORT SCORE
+                            </span>
+                          </div>
+                          <div className="progress-bar-track">
+                            <div 
+                              className={`progress-bar-fill ${selectedPayroll.effort_score >= 50 ? 'high' : 'low'}`}
+                              style={{ width: `${selectedPayroll.effort_score}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Audit Decree Box */}
+                      {selectedPayroll.audit_report && (
+                        <div className={`decree-box ${selectedPayroll.status === 'PAID' ? 'paid' : selectedPayroll.status === 'SLASHED' ? 'slashed' : ''}`}>
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: selectedPayroll.status === 'PAID' ? 'var(--emerald-success)' : selectedPayroll.status === 'SLASHED' ? 'var(--rose-slash)' : 'var(--primary-cyan)', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <ShieldCheck size={16} />
+                            GENLAYER AI AUDITOR DECREE LOG
+                          </div>
+                          <div style={{ fontStyle: 'italic', fontSize: '14px', color: '#E2E8F0', lineHeight: '22px' }}>
+                            "{selectedPayroll.audit_report}"
+                          </div>
+
+                          {selectedPayroll.work_proof_url && (
+                            <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>VERIFIED REPORT URL:</span>
+                              <a 
+                                href={selectedPayroll.work_proof_url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                style={{ color: 'var(--primary-cyan)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                {selectedPayroll.work_proof_url}
+                                <ExternalLink size={12} />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Form */}
+                      <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                        {selectedPayroll.status === 'ACTIVE' ? (
+                          <div>
+                            {(address.toLowerCase() === selectedPayroll.contributor.toLowerCase() || address.toLowerCase() === selectedPayroll.dao.toLowerCase()) ? (
+                              <div>
+                                <div style={{ background: 'var(--primary-cyan-dim)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '12px', padding: '14px 18px', fontSize: '13px', color: '#A5F3FC', marginBottom: '20px' }}>
+                                  Authenticated Role Recognized // {address.toLowerCase() === selectedPayroll.contributor.toLowerCase() ? "Contributor" : "DAO Admin"}. Submit your work proof URL below to trigger AI auditing.
+                                </div>
+
+                                {/* Preset Fill Buttons */}
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                                  <button
+                                    type="button"
+                                    className="preset-btn preset-btn-cyan"
+                                    onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt')}
+                                  >
+                                    <Sparkles size={14} />
+                                    + Fill Solid Work Report (Payout)
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="preset-btn preset-btn-rose"
+                                    onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt')}
+                                  >
+                                    <AlertCircle size={14} />
+                                    + Fill Fluff Meetings Report (Slash & Refund DAO)
+                                  </button>
+                                </div>
+
+                                <form onSubmit={handleRequestSalary}>
+                                  <div className="form-group">
+                                    <label className="form-label">WORK PROOF URL (GitHub Gist, Notion Doc, Blog Link)</label>
+                                    <input 
+                                      type="text" 
+                                      placeholder="https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt" 
+                                      value={workProofUrlInput || 'https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt'}
+                                      onChange={(e) => setWorkProofUrlInput(e.target.value)}
+                                      className="form-input"
+                                      required
+                                    />
+                                  </div>
+
+                                  <button type="submit" className="btn-primary" disabled={loading}>
+                                    {loading ? (
+                                      <>
+                                        <RefreshCw size={18} className="animate-spin" />
+                                        Auditing Work Report via AI Nodes...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ShieldCheck size={18} />
+                                        Trigger AI Audit & Settle Payout
+                                      </>
+                                    )}
+                                  </button>
+                                </form>
+                              </div>
+                            ) : (
+                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px', background: '#0D1017', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                                Awaiting contributor claim. Connected wallet is not a recognized party for this payroll.
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ background: '#0D1017', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'center', fontSize: '13px' }}>
+                            Dossier Finalized. Payout settled or refunded to DAO. State locked on-chain.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        </footer>
-      </div>
+        )}
+      </main>
     </div>
   );
 }
