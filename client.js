@@ -2,7 +2,7 @@
 import { createClient } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
 
-const CONTRACT_ADDRESS = "0x2382aD12494199b7ABD97D4453c6CB69afD9dF15";
+const CONTRACT_ADDRESS = "0x4b9bAb2d12B6003206Fb7DFB06fB8a81B482B41b";
 
 export async function getPayrollsCount() {
   const client = createClient({ chain: studionet });
