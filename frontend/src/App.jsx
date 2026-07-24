@@ -44,7 +44,6 @@ export default function App() {
 
   // Slashed animation trigger states
   const [triggerSlashAnim, setTriggerSlashAnim] = useState(false);
-  const [showSlashLine, setShowSlashLine] = useState(false);
 
   const selectedPayroll = payrolls.find(p => Number(p.id) === Number(selectedPayrollId));
 
@@ -60,13 +59,11 @@ export default function App() {
     if (selectedPayroll) {
       if (selectedPayroll.status === 'SLASHED') {
         setTriggerSlashAnim(true);
-        setShowSlashLine(true);
         const timer = setTimeout(() => {
           setTriggerSlashAnim(false);
         }, 1000);
         return () => clearTimeout(timer);
       } else {
-        setShowSlashLine(false);
         setTriggerSlashAnim(false);
       }
     }
@@ -117,9 +114,6 @@ export default function App() {
 
   return (
     <div className={`terminal-container ${triggerSlashAnim ? 'slash-screen-shake slash-screen-flash' : ''}`}>
-      {/* Screen slashing overlay */}
-      {showSlashLine && <div className="slash-overlay-line" />}
-
       {/* Loading overlay */}
       {loading && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0, 0, 0, 0.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 200, border: '4px solid var(--blood-red)' }}>
