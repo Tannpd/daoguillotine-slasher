@@ -135,7 +135,9 @@ class Contract(gl.Contract):
 
         # Authorized Domain Check
         if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                url_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
                 url_lower.startswith("https://github.com/") or
+                url_lower.startswith("https://raw.githubusercontent.com/") or
                 url_lower.startswith("https://gitlab.com/") or
                 url_lower.startswith("https://status.vendor.com/") or
                 url_lower.startswith("http://localhost:5173/")):
@@ -178,7 +180,9 @@ class Contract(gl.Contract):
 
         # Domain Origin Safeguard
         if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                url_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
                 url_lower.startswith("https://github.com/") or
+                url_lower.startswith("https://raw.githubusercontent.com/") or
                 url_lower.startswith("https://gitlab.com/") or
                 url_lower.startswith("https://status.vendor.com/") or
                 url_lower.startswith("http://localhost:5173/")):
@@ -189,7 +193,9 @@ class Contract(gl.Contract):
             if not (ce_lower.startswith("http://") or ce_lower.startswith("https://")):
                 raise UserError("Invalid counter-evidence URL format.")
             if not (ce_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                    ce_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
                     ce_lower.startswith("https://github.com/") or
+                    ce_lower.startswith("https://raw.githubusercontent.com/") or
                     ce_lower.startswith("https://gitlab.com/") or
                     ce_lower.startswith("https://status.vendor.com/") or
                     ce_lower.startswith("http://localhost:5173/")):
