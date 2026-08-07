@@ -7,11 +7,7 @@
 # =============================================================================
 
 from genlayer import *
-import genlayer as gl
 import json
-
-if not hasattr(gl, 'Contract'):
-    gl.Contract = Contract
 
 class UserError(Exception):
     pass
@@ -34,7 +30,7 @@ def to_address(val) -> Address:
             return Address(val)
     return Address(str(val))
 
-class Contract(Contract):
+class Contract(gl.Contract):
     """
     DAOGuillotine
     =============
