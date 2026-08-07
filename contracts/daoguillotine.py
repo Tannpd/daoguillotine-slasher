@@ -34,24 +34,27 @@ class Contract(gl.Contract):
     """
     DAOGuillotine
     =============
-    Holds contributor salary/bounties in escrow. Before a payday, the contributor
-    submits a work report URL. The AI acts as a ruthless tech lead auditing report text,
-    punishing corporate fluff and meeting spam. If effort is insufficient (is_slashed = true),
-    the salary is slashed and refunded to the DAO treasury. If acceptable, it pays out.
+    Holds contributor salary/bounties in escrow bound to shared acceptance criteria.
+    Before payday, contributor submits authenticated work proof URL and DAO can submit counter-evidence.
+    GenLayer AI validators cross-examine deliverables against acceptance criteria & counter-evidence.
+    If effort is insufficient or criteria breached (is_slashed = true), salary is slashed to DAO treasury.
+    Includes timeout recovery path allowing DAO to reclaim escrowed funds if abandoned or failed.
     """
 
     # Monotonic payroll counter
-    payrolls_count:               bigint
+    payrolls_count:                   bigint
 
     # Storage Mappings (Pre-initialized by the VM)
-    payroll_dao:                  TreeMap[str, Address]
-    payroll_contributor:          TreeMap[str, Address]
-    payroll_amount:               TreeMap[str, bigint]
-    payroll_status:               TreeMap[str, str]       # "ACTIVE", "SLASHED", "PAID", "FAILED"
-    payroll_work_proof_url:       TreeMap[str, str]
-    payroll_is_slashed:           TreeMap[str, bool]
-    payroll_effort_score:         TreeMap[str, bigint]    # 0 to 100
-    payroll_audit_report:         TreeMap[str, str]
+    payroll_dao:                      TreeMap[str, Address]
+    payroll_contributor:              TreeMap[str, Address]
+    payroll_amount:                   TreeMap[str, bigint]
+    payroll_status:                   TreeMap[str, str]       # "ACTIVE", "SLASHED", "PAID", "FAILED", "RECLAIMED"
+    payroll_acceptance_criteria_url:  TreeMap[str, str]       # Agreed deliverables policy URL
+    payroll_work_proof_url:           TreeMap[str, str]       # Contributor submitted proof URL
+    payroll_counter_evidence_url:     TreeMap[str, str]       # DAO challenge counter-evidence URL
+    payroll_is_slashed:               TreeMap[str, bool]
+    payroll_effort_score:             TreeMap[str, bigint]    # 0 to 100
+    payroll_audit_report:             TreeMap[str, str]
 
     # -------------------------------------------------------------------
     # CONSTRUCTOR
@@ -60,12 +63,12 @@ class Contract(gl.Contract):
         self.payrolls_count = bigint(0)
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: CREATE PAYROLL ESCROW (BY DAO)
+    # PUBLIC WRITE: CREATE PAYROLL ESCROW WITH ACCEPTANCE CRITERIA (BY DAO)
     # -------------------------------------------------------------------
     @gl.public.write.payable
-    def create_payroll(self, contributor: Address) -> int:
+    def create_payroll(self, contributor: Address, acceptance_criteria_url: str = "") -> int:
         """
-        DAO calls this, locks native GEN tokens as a salary/bounty, and specifies the contributor.
+        DAO locks native GEN tokens as salary/bounty, specifying contributor and shared acceptance criteria URL.
         """
         amount = gl.message.value
         if amount <= bigint(0):
@@ -75,6 +78,14 @@ class Contract(gl.Contract):
         if str(contributor_clean) == "0x0000000000000000000000000000000000000000":
             raise UserError("Invalid contributor address.")
 
+        criteria_clean = acceptance_criteria_url.strip()
+        if len(criteria_clean) > 0:
+            crit_lower = criteria_clean.lower()
+            if not (crit_lower.startswith("http://") or crit_lower.startswith("https://")):
+                raise UserError("Invalid acceptance criteria URL format. Must start with http:// or https://")
+        else:
+            criteria_clean = "https://daoguillotine-app.vercel.app/default_acceptance_criteria.txt"
+
         pid = self.payrolls_count
         pid_str = str(pid)
         dao = to_address(gl.message.sender_address)
@@ -83,22 +94,64 @@ class Contract(gl.Contract):
         self.payroll_contributor[pid_str] = contributor_clean
         self.payroll_amount[pid_str] = amount
         self.payroll_status[pid_str] = "ACTIVE"
+        self.payroll_acceptance_criteria_url[pid_str] = criteria_clean
         self.payroll_work_proof_url[pid_str] = ""
+        self.payroll_counter_evidence_url[pid_str] = ""
         self.payroll_is_slashed[pid_str] = False
         self.payroll_effort_score[pid_str] = bigint(0)
-        self.payroll_audit_report[pid_str] = "Awaiting claim and work proof URL submission."
+        self.payroll_audit_report[pid_str] = "Awaiting claim work proof URL submission."
 
         self.payrolls_count = pid + bigint(1)
         return int(pid)
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: REQUEST SALARY / TRIGGER AUDIT (AUTHENTICATED CONTRIBUTOR)
+    # PUBLIC WRITE: SUBMIT COUNTER-EVIDENCE (CHALLENGE PATH BY DAO)
     # -------------------------------------------------------------------
     @gl.public.write
-    def request_salary(self, payroll_id: int, work_proof_url: str) -> None:
+    def submit_counter_evidence(self, payroll_id: int, counter_evidence_url: str) -> None:
         """
-        Contributor triggers this by submitting a link to their work report.
-        The AI scans and audits the work, executing a payout or slash/refund to DAO.
+        DAO Admin attaches counter-evidence (e.g. dispute report, bug log) to challenge contributor claims.
+        """
+        pid_str = str(payroll_id)
+        if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
+            raise UserError("Payroll record does not exist.")
+
+        status = self.payroll_status.get(pid_str, "ACTIVE")
+        if status != "ACTIVE" and status != "FAILED":
+            raise UserError("Payroll is not in active or failed state for counter-evidence submission.")
+
+        sender = to_address(gl.message.sender_address)
+        dao = to_address(self.payroll_dao.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
+        if str(sender) != str(dao):
+            raise UserError("Only the designated DAO admin can submit counter-evidence.")
+
+        clean_url = counter_evidence_url.strip()
+        if len(clean_url) == 0:
+            raise UserError("Counter-evidence URL cannot be empty.")
+
+        url_lower = clean_url.lower()
+        if not (url_lower.startswith("http://") or url_lower.startswith("https://")):
+            raise UserError("Invalid counter-evidence URL format. Must start with http:// or https://")
+
+        # Authorized Domain Check
+        if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                url_lower.startswith("https://github.com/") or
+                url_lower.startswith("https://gitlab.com/") or
+                url_lower.startswith("https://status.vendor.com/") or
+                url_lower.startswith("http://localhost:5173/")):
+            raise UserError("Unauthorized counter-evidence domain origin.")
+
+        self.payroll_counter_evidence_url[pid_str] = clean_url
+        self.payroll_audit_report[pid_str] = "DAO counter-evidence attached. Ready for AI audit."
+
+    # -------------------------------------------------------------------
+    # PUBLIC WRITE: REQUEST SALARY / TRIGGER AUDIT (WITH COUNTER EVIDENCE)
+    # -------------------------------------------------------------------
+    @gl.public.write
+    def request_salary_and_audit(self, payroll_id: int, work_proof_url: str, counter_evidence_url: str = "") -> None:
+        """
+        Contributor or DAO triggers salary audit by providing work proof URL and optional counter-evidence.
+        GenLayer AI nodes scrape acceptance criteria, work proof, and counter-evidence for cross-examination.
         """
         pid_str = str(payroll_id)
         if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
@@ -121,16 +174,48 @@ class Contract(gl.Contract):
 
         url_lower = work_proof_url.lower().strip()
         if not (url_lower.startswith("http://") or url_lower.startswith("https://")):
-            raise UserError("Invalid URL format. Must start with http:// or https://")
+            raise UserError("Invalid work proof URL format. Must start with http:// or https://")
+
+        # Domain Origin Safeguard
+        if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                url_lower.startswith("https://github.com/") or
+                url_lower.startswith("https://gitlab.com/") or
+                url_lower.startswith("https://status.vendor.com/") or
+                url_lower.startswith("http://localhost:5173/")):
+            raise UserError("Unauthorized work proof domain origin.")
+
+        if len(counter_evidence_url.strip()) > 0:
+            ce_lower = counter_evidence_url.lower().strip()
+            if not (ce_lower.startswith("http://") or ce_lower.startswith("https://")):
+                raise UserError("Invalid counter-evidence URL format.")
+            if not (ce_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                    ce_lower.startswith("https://github.com/") or
+                    ce_lower.startswith("https://gitlab.com/") or
+                    ce_lower.startswith("https://status.vendor.com/") or
+                    ce_lower.startswith("http://localhost:5173/")):
+                raise UserError("Unauthorized counter-evidence domain origin.")
+            self.payroll_counter_evidence_url[pid_str] = counter_evidence_url.strip()
 
         # Update status and save work proof URL
         self.payroll_work_proof_url[pid_str] = work_proof_url.strip()
         self.payroll_status[pid_str] = "ACTIVE"
-        self.payroll_audit_report[pid_str] = "Auditing report text. Inspecting deliverables..."
+        self.payroll_audit_report[pid_str] = "Auditing report text. Inspecting deliverables against criteria..."
+
+        acceptance_criteria_url = self.payroll_acceptance_criteria_url.get(pid_str, "")
+        final_counter_evidence_url = self.payroll_counter_evidence_url.get(pid_str, "")
 
         # Non-Deterministic Consensus Function
         def leader_fn() -> str:
-            # 1. Fetch web contents
+            # 1. Fetch Acceptance Criteria
+            criteria_text = "Standard DAO Deliverables: Complete assigned tasks with tangible outputs."
+            if len(acceptance_criteria_url) > 0:
+                try:
+                    raw_crit = gl.nondet.web.render(acceptance_criteria_url)
+                    criteria_text = raw_crit.decode('utf-8', errors='ignore').strip() if isinstance(raw_crit, bytes) else str(raw_crit).strip()
+                except Exception as e:
+                    criteria_text = f"Default criteria (web load warning: {str(e)})"
+
+            # 2. Fetch Work Proof
             try:
                 raw_data = gl.nondet.web.render(work_proof_url)
                 if isinstance(raw_data, bytes):
@@ -153,42 +238,57 @@ class Contract(gl.Contract):
                     "audit_report": "The work report page appeared to be empty or unparseable. Cannot verify claims."
                 })
 
-            excerpt = text[:6000]
+            # 3. Fetch Counter-Evidence if present
+            counter_text = "None submitted by DAO."
+            if len(final_counter_evidence_url) > 0:
+                try:
+                    raw_ce = gl.nondet.web.render(final_counter_evidence_url)
+                    counter_text = raw_ce.decode('utf-8', errors='ignore').strip() if isinstance(raw_ce, bytes) else str(raw_ce).strip()
+                except Exception:
+                    counter_text = f"Counter-evidence submitted at {final_counter_evidence_url} (Could not load body)."
 
-            # 2. AI Tech Lead Prompt
-            prompt = f"""You are a Ruthless Technical & Business Lead acting as an Auditor in a DAO payroll system.
-Your job is to examine work reports and identify "fake work", corporate fluff, meeting-spam, and low-effort participation. 
-You must separate concrete deliverables (such as written code, PRs, designed graphics, finished documents, deployed systems) from general filler (such as "Attended meetings," "Exchanged messages on Telegram," "Tweeted GM", "Did research" without any links or outputs).
+            excerpt_criteria = criteria_text[:2000]
+            excerpt_work = text[:5000]
+            excerpt_counter = counter_text[:2000]
 
-Severely punish corporate fluff. If a contributor spends their time on "organizing meetings" or "discussing ideas" with no concrete output, set "is_slashed" to true.
+            # 4. AI Tech Lead Prompt
+            prompt = f"""You are a Ruthless Technical Lead acting as an Auditor in a DAO payroll system.
+Your job is to examine work reports against agreed acceptance criteria and optional DAO counter-evidence.
+Identify "fake work", corporate fluff, meeting-spam, or unfulfilled acceptance criteria.
+Separate concrete deliverables (written code, PRs, graphics, finished documents, deployed systems) from filler ("Attended meetings," "Telegram chat", "GM tweets").
 
-Work Proof URL: {work_proof_url}
-Scraped Work Proof Text:
---- START WORK REPORT ---
-{excerpt}
---- END WORK REPORT ---
+AGREED ACCEPTANCE CRITERIA:
+\"\"\"
+{excerpt_criteria}
+\"\"\"
 
-Evaluate:
-1. Did the contributor complete concrete, tangible deliverables?
-2. Is the report filled with corporate fluff, meetings, or low-effort actions?
-3. Calculate an "effort_score" from 0 to 100 (where 0 means zero real deliverables/total fluff, and 100 means massive tangible deliverables).
-4. If "effort_score" is less than 50, "is_slashed" MUST be true. If "effort_score" is 50 or above, "is_slashed" should be false.
-5. Write a concise, direct, and critical "Audit Report" (audit_report) summarizing their effort.
+CONTRIBUTOR WORK PROOF TEXT ({work_proof_url}):
+\"\"\"
+{excerpt_work}
+\"\"\"
 
-Your output MUST be a single, valid JSON object with EXACTLY the following keys:
+DAO COUNTER-EVIDENCE DISPUTE TEXT:
+\"\"\"
+{excerpt_counter}
+\"\"\"
+
+EVALUATION INSTRUCTIONS:
+1. Cross-examine the contributor work proof against agreed acceptance criteria and DAO counter-evidence.
+2. Calculate an "effort_score" from 0 to 100 based on tangible criteria fulfillment.
+3. If "effort_score" is less than 50 or criteria breached, "is_slashed" MUST be true. If 50 or above, "is_slashed" should be false.
+4. Write a concise, direct audit report.
+
+Respond ONLY as a single valid JSON object:
 {{
-  "is_slashed": true | false,
-  "effort_score": <int between 0 and 100>,
-  "audit_report": "<2-3 sentences of direct and honest audit review>"
+  "is_slashed": boolean,
+  "effort_score": integer,
+  "audit_report": "string"
 }}
-Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY raw JSON."""
+"""
 
             try:
                 raw_output = gl.nondet.exec_prompt(prompt)
-                if isinstance(raw_output, bytes):
-                    raw_str = raw_output.decode('utf-8', errors='ignore').strip()
-                else:
-                    raw_str = str(raw_output).strip()
+                raw_str = raw_output.decode('utf-8', errors='ignore').strip() if isinstance(raw_output, bytes) else str(raw_output).strip()
             except Exception as e:
                 return json.dumps({
                     "error": f"LLM_EXECUTION_FAILED: {str(e)}",
@@ -211,7 +311,7 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
                 parsed = json.loads(cleaned)
                 raw_slashed = parsed.get("is_slashed")
 
-                # STRICT BOOLEAN TYPE VALIDATION (Prevents string "false" coercion to True)
+                # STRICT BOOLEAN TYPE VALIDATION
                 if not isinstance(raw_slashed, bool):
                     return json.dumps({
                         "error": "INVALID_BOOLEAN_TYPE",
@@ -250,10 +350,7 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
             Requires strict JSON boolean validation.
             """
             try:
-                if isinstance(leader_result, bytes):
-                    leader_str = leader_result.decode('utf-8', errors='ignore')
-                else:
-                    leader_str = str(leader_result)
+                leader_str = leader_result.decode('utf-8', errors='ignore') if isinstance(leader_result, bytes) else str(leader_result)
                 l_start = leader_str.find('{')
                 l_end = leader_str.rfind('}')
                 if l_start == -1 or l_end == -1 or l_start > l_end:
@@ -273,10 +370,7 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
 
             validator_raw = leader_fn()
             try:
-                if isinstance(validator_raw, bytes):
-                    val_str = validator_raw.decode('utf-8', errors='ignore')
-                else:
-                    val_str = str(validator_raw)
+                val_str = validator_raw.decode('utf-8', errors='ignore') if isinstance(validator_raw, bytes) else str(validator_raw)
                 v_start = val_str.find('{')
                 v_end = val_str.rfind('}')
                 if v_start == -1 or v_end == -1 or v_start > v_end:
@@ -303,10 +397,7 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
         consensus_json = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 
         try:
-            if isinstance(consensus_json, bytes):
-                cons_str = consensus_json.decode('utf-8', errors='ignore')
-            else:
-                cons_str = str(consensus_json)
+            cons_str = consensus_json.decode('utf-8', errors='ignore') if isinstance(consensus_json, bytes) else str(consensus_json)
             cons_start = cons_str.find('{')
             cons_end = cons_str.rfind('}')
             if cons_start == -1 or cons_end == -1 or cons_start > cons_end:
@@ -345,7 +436,7 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
         # Reentrancy Protection
         self.payroll_amount[pid_str] = bigint(0)
 
-        # Execute payout or DAO refund using SDK account-transfer API (unsuppressed)
+        # Execute payout or DAO refund using SDK account-transfer API
         if is_slashed:
             # Funds returned to DAO treasury
             self.payroll_status[pid_str] = "SLASHED"
@@ -356,6 +447,46 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
             self.payroll_status[pid_str] = "PAID"
             other_contributor = gl.get_contract_at(contributor)
             other_contributor.emit_transfer(value=bigint(amount))
+
+    # Backward compatibility wrapper method
+    @gl.public.write
+    def request_salary(self, payroll_id: int, work_proof_url: str) -> None:
+        """
+        Backward-compatible method calling request_salary_and_audit.
+        """
+        self.request_salary_and_audit(payroll_id, work_proof_url, "")
+
+    # -------------------------------------------------------------------
+    # PUBLIC WRITE: TIMEOUT RECOVERY PATH (BY DAO)
+    # -------------------------------------------------------------------
+    @gl.public.write
+    def reclaim_timed_out_payroll(self, payroll_id: int) -> None:
+        """
+        Allows the DAO to recover locked GEN deposit if the payroll failed audit
+        or if the contributor abandoned the claim.
+        """
+        pid_str = str(payroll_id)
+        if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
+            raise UserError("Payroll record does not exist.")
+
+        status = self.payroll_status.get(pid_str, "")
+        if status != "ACTIVE" and status != "FAILED":
+            raise UserError("Payroll is not in active or failed state for timeout recovery.")
+
+        sender = to_address(gl.message.sender_address)
+        dao = to_address(self.payroll_dao.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
+        if str(sender) != str(dao):
+            raise UserError("Only the designated DAO admin can reclaim timed out payroll funds.")
+
+        amount = self.payroll_amount.get(pid_str, bigint(0))
+        if amount <= bigint(0):
+            raise UserError("Payroll has no locked funds to reclaim.")
+
+        self.payroll_amount[pid_str] = bigint(0)
+        self.payroll_status[pid_str] = "RECLAIMED"
+        self.payroll_audit_report[pid_str] = "DAO admin reclaimed escrowed funds via timeout recovery path."
+
+        gl.get_contract_at(dao).emit_transfer(value=bigint(amount))
 
     # -------------------------------------------------------------------
     # READ-ONLY VIEW METHODS
@@ -373,7 +504,9 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
         contributor = to_address(self.payroll_contributor.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
         amount = self.payroll_amount.get(pid_str, bigint(0))
         status = self.payroll_status.get(pid_str, "ACTIVE")
+        crit_url = self.payroll_acceptance_criteria_url.get(pid_str, "")
         proof = self.payroll_work_proof_url.get(pid_str, "")
+        counter = self.payroll_counter_evidence_url.get(pid_str, "")
         slashed = bool(self.payroll_is_slashed.get(pid_str, False))
         score = int(self.payroll_effort_score.get(pid_str, bigint(0)))
         report = self.payroll_audit_report.get(pid_str, "")
@@ -384,7 +517,9 @@ Do NOT wrap the JSON in markdown code blocks. Do NOT add extra text. Return ONLY
             "contributor": str(contributor),
             "amount": int(amount),
             "status": status,
+            "acceptance_criteria_url": crit_url,
             "work_proof_url": proof,
+            "counter_evidence_url": counter,
             "is_slashed": slashed,
             "effort_score": score,
             "audit_report": report

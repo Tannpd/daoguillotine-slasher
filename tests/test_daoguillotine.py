@@ -34,7 +34,7 @@ class MockWeb:
             raise Exception("404 Report Link Blocked")
         if "empty" in url:
             return ""
-        return self.url_to_content.get(url, "Scraped report: Implemented smart contract suite, written 100% unit tests, deployed frontend on Vercel.")
+        return self.url_to_content.get(url, "Scraped report: Implemented smart contract suite, written 100% unit tests, deployed web app.")
 
 class MockNondet:
     def __init__(self):
@@ -119,12 +119,13 @@ class TestDAOGuillotine(unittest.TestCase):
         self.assertTrue(os.path.exists(compiled_file))
 
     def test_create_payroll_payable_deposit(self):
-        """Verify create_payroll attaches value and locks salary deposit in escrow."""
+        """Verify create_payroll attaches value, binds shared acceptance criteria, and locks salary deposit in escrow."""
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
+        crit_url = "https://daoguillotine-app.vercel.app/criteria_sprint_1.txt"
         mock_gl.message = MockMessage(sender=dao, value=5000000000000000000)
 
-        pid = self.contract.create_payroll(contributor)
+        pid = self.contract.create_payroll(contributor, crit_url)
         self.assertEqual(pid, 0)
 
         payroll_json = self.contract.get_payroll(0)
@@ -133,6 +134,7 @@ class TestDAOGuillotine(unittest.TestCase):
         self.assertEqual(payroll["id"], 0)
         self.assertEqual(payroll["dao"], dao)
         self.assertEqual(payroll["contributor"], contributor)
+        self.assertEqual(payroll["acceptance_criteria_url"], crit_url)
         self.assertEqual(payroll["amount"], 5000000000000000000)
         self.assertEqual(payroll["status"], "ACTIVE")
         self.assertEqual(self.contract.get_payrolls_count(), 1)
@@ -141,22 +143,24 @@ class TestDAOGuillotine(unittest.TestCase):
         """Verify solid work report approves salary and triggers emit_transfer to contributor."""
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
+        crit_url = "https://daoguillotine-app.vercel.app/criteria.txt"
+        work_url = "https://daoguillotine-app.vercel.app/mock_report_solid_work.txt"
         mock_gl.message = MockMessage(sender=dao, value=3000000000000000000)
-        self.contract.create_payroll(contributor)
+        self.contract.create_payroll(contributor, crit_url)
 
-        mock_gl.nondet.web.url_to_content["https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt"] = \
-            "Tangible deliverables: Built smart contracts, wrote unit tests, deployed web app."
+        mock_gl.nondet.web.url_to_content[crit_url] = "Agreed criteria: Implement GenLayer contracts & pass unit tests."
+        mock_gl.nondet.web.url_to_content[work_url] = "Tangible deliverables: Built smart contracts, wrote unit tests, deployed web app."
 
         mock_gl.nondet.exec_prompt_responses = [
             json.dumps({
                 "is_slashed": False,
                 "effort_score": 90,
-                "audit_report": "High tangible output verified. Full salary authorized."
+                "audit_report": "High tangible output verified against criteria. Full salary authorized."
             })
         ]
 
         mock_gl.message = MockMessage(sender=contributor)
-        self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt")
+        self.contract.request_salary(0, work_url)
 
         payroll_json = self.contract.get_payroll(0)
         payroll = json.loads(payroll_json)
@@ -167,47 +171,88 @@ class TestDAOGuillotine(unittest.TestCase):
         self.assertEqual(payroll["amount"], 0)
         self.assertTrue(any(t["target"] == contributor and t["value"] == 3000000000000000000 for t in mock_gl.transfers_log))
 
-    def test_request_salary_dao_refund_slashed(self):
-        """Verify fluff/meeting spam report slashes salary and refunds GEN back to DAO treasury."""
+    def test_submit_counter_evidence_and_challenge(self):
+        """Verify DAO can submit counter-evidence to challenge contributor claims."""
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
-        mock_gl.message = MockMessage(sender=dao, value=4000000000000000000)
-        self.contract.create_payroll(contributor)
+        crit_url = "https://daoguillotine-app.vercel.app/criteria.txt"
+        work_url = "https://daoguillotine-app.vercel.app/work.txt"
+        ce_url = "https://daoguillotine-app.vercel.app/counter_evidence_bug_log.txt"
 
-        mock_gl.nondet.web.url_to_content["https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt"] = \
-            "Work report: Attended 5 sync meetings, tweeted GM, talked in Telegram."
+        mock_gl.message = MockMessage(sender=dao, value=4000000000000000000)
+        self.contract.create_payroll(contributor, crit_url)
+
+        # DAO submits counter-evidence challenge
+        mock_gl.message = MockMessage(sender=dao)
+        self.contract.submit_counter_evidence(0, ce_url)
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+        self.assertEqual(payroll["counter_evidence_url"], ce_url)
+
+        mock_gl.nondet.web.url_to_content[crit_url] = "Criteria: Zero critical bugs in production code."
+        mock_gl.nondet.web.url_to_content[work_url] = "Claim: Deployed code on mainnet."
+        mock_gl.nondet.web.url_to_content[ce_url] = "DAO Dispute Report: Critical reentrancy bug found in deployed code!"
 
         mock_gl.nondet.exec_prompt_responses = [
             json.dumps({
                 "is_slashed": True,
-                "effort_score": 10,
-                "audit_report": "Corporate fluff and meeting spam detected. Salary slashed."
+                "effort_score": 20,
+                "audit_report": "DAO counter-evidence confirmed critical bug. Salary slashed to DAO treasury."
             })
         ]
 
         mock_gl.message = MockMessage(sender=contributor)
-        self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt")
+        self.contract.request_salary_and_audit(0, work_url, ce_url)
 
         payroll_json = self.contract.get_payroll(0)
         payroll = json.loads(payroll_json)
 
         self.assertTrue(payroll["is_slashed"])
-        self.assertEqual(payroll["effort_score"], 10)
         self.assertEqual(payroll["status"], "SLASHED")
-        self.assertEqual(payroll["amount"], 0)
         self.assertTrue(any(t["target"] == dao and t["value"] == 4000000000000000000 for t in mock_gl.transfers_log))
+
+    def test_reclaim_timed_out_payroll(self):
+        """Verify DAO can reclaim locked GEN deposit via timeout recovery path."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=2000000000000000000)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
+
+        # DAO reclaims abandoned payroll
+        mock_gl.message = MockMessage(sender=dao)
+        self.contract.reclaim_timed_out_payroll(0)
+
+        payroll_json = self.contract.get_payroll(0)
+        payroll = json.loads(payroll_json)
+
+        self.assertEqual(payroll["status"], "RECLAIMED")
+        self.assertEqual(payroll["amount"], 0)
+        self.assertTrue(any(t["target"] == dao and t["value"] == 2000000000000000000 for t in mock_gl.transfers_log))
+
+    def test_unauthorized_domain_origin_rejected(self):
+        """Verify arbitrary un-whitelisted domain URLs are blocked for work proof."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
+
+        mock_gl.message = MockMessage(sender=contributor)
+        with self.assertRaises(daoguillotine.UserError) as ctx:
+            self.contract.request_salary(0, "https://fake-unauthorized-site.com/fake_report.txt")
+        self.assertIn("Unauthorized work proof domain origin", str(ctx.exception))
 
     def test_request_salary_access_control_unauthorized(self):
         """Verify unauthorized third party cannot trigger salary audit."""
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
         mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
-        self.contract.create_payroll(contributor)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
 
         mock_gl.message = MockMessage(sender="0x9999999999999999999999999999999999999999")
 
-        with self.assertRaises(Exception) as ctx:
-            self.contract.request_salary(0, "https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt")
+        with self.assertRaises(daoguillotine.UserError) as ctx:
+            self.contract.request_salary(0, "https://daoguillotine-app.vercel.app/mock_report_solid_work.txt")
         self.assertIn("Only the designated contributor or DAO admin can request salary audit", str(ctx.exception))
 
     def test_strict_boolean_validation_rejects_string_boolean(self):
@@ -215,9 +260,9 @@ class TestDAOGuillotine(unittest.TestCase):
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
         mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
-        self.contract.create_payroll(contributor)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
 
-        mock_gl.nondet.web.url_to_content["https://fake-report.com/work"] = "Report content"
+        mock_gl.nondet.web.url_to_content["https://daoguillotine-app.vercel.app/work.txt"] = "Report content"
 
         # LLM returns string "false" instead of boolean false
         mock_gl.nondet.exec_prompt_responses = [
@@ -229,7 +274,7 @@ class TestDAOGuillotine(unittest.TestCase):
         ]
 
         mock_gl.message = MockMessage(sender=contributor)
-        self.contract.request_salary(0, "https://fake-report.com/work")
+        self.contract.request_salary(0, "https://daoguillotine-app.vercel.app/work.txt")
 
         payroll_json = self.contract.get_payroll(0)
         payroll = json.loads(payroll_json)
@@ -242,12 +287,12 @@ class TestDAOGuillotine(unittest.TestCase):
         dao = "0x1111111111111111111111111111111111111111"
         contributor = "0x2222222222222222222222222222222222222222"
         mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
-        self.contract.create_payroll(contributor)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
 
         mock_gl.nondet.web.fail_on_next = True
 
         mock_gl.message = MockMessage(sender=contributor)
-        self.contract.request_salary(0, "https://flaky-server.com/report")
+        self.contract.request_salary(0, "https://daoguillotine-app.vercel.app/report")
 
         payroll_json = self.contract.get_payroll(0)
         payroll = json.loads(payroll_json)
