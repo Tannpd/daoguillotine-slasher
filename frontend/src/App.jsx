@@ -37,6 +37,8 @@ export default function App() {
     connectWallet,
     fetchPayrollsState,
     createPayroll,
+    submitCounterEvidence,
+    reclaimTimedOutPayroll,
     requestSalary,
     contractAddress
   } = useDAOGuillotine();
@@ -47,7 +49,9 @@ export default function App() {
   // Form inputs
   const [contributorInput, setContributorInput] = useState('');
   const [amountInput, setAmountInput] = useState('5.0');
+  const [acceptanceCriteriaUrlInput, setAcceptanceCriteriaUrlInput] = useState('');
   const [workProofUrlInput, setWorkProofUrlInput] = useState('');
+  const [counterEvidenceUrlInput, setCounterEvidenceUrlInput] = useState('');
 
   const selectedPayroll = payrolls.find(p => Number(p.id) === Number(selectedPayrollId));
 
@@ -62,9 +66,10 @@ export default function App() {
     e.preventDefault();
     if (!contributorInput || !amountInput) return;
     try {
-      await createPayroll(contributorInput, amountInput);
+      await createPayroll(contributorInput, amountInput, acceptanceCriteriaUrlInput);
       setContributorInput('');
       setAmountInput('5.0');
+      setAcceptanceCriteriaUrlInput('');
       setActiveTab('CABINET');
       setSelectedPayrollId(0);
     } catch (err) {
@@ -76,8 +81,17 @@ export default function App() {
     e.preventDefault();
     if (!workProofUrlInput || selectedPayrollId === null) return;
     try {
-      await requestSalary(selectedPayrollId, workProofUrlInput);
+      await requestSalary(selectedPayrollId, workProofUrlInput, counterEvidenceUrlInput);
       setWorkProofUrlInput('');
+      setCounterEvidenceUrlInput('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleReclaimTimedOut = async (payrollId) => {
+    try {
+      await reclaimTimedOutPayroll(payrollId);
     } catch (err) {
       console.error(err);
     }

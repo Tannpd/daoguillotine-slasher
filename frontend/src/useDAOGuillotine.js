@@ -149,8 +149,8 @@ export function useDAOGuillotine() {
     }
   }, []);
 
-  // Create Payroll (DAO locks funds)
-  const createPayroll = async (contributorAddress, depositAmt) => {
+  // Create Payroll (DAO locks funds with acceptance criteria)
+  const createPayroll = async (contributorAddress, depositAmt, acceptanceCriteriaUrl = '') => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -166,7 +166,7 @@ export function useDAOGuillotine() {
       const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_payroll',
-        args: [contributorAddress.trim()],
+        args: [contributorAddress.trim(), acceptanceCriteriaUrl.trim()],
         value: valueWei,
       });
       
@@ -194,8 +194,92 @@ export function useDAOGuillotine() {
     }
   };
 
+  // Submit Counter Evidence (DAO challenges claim)
+  const submitCounterEvidence = async (payrollId, counterEvidenceUrl) => {
+    if (!glAccount || !CONTRACT_ADDRESS) {
+      throw new Error('Wallet not connected');
+    }
+    setLoading(true);
+    setError('');
+    setTxHash('');
+    setTxStatus(`Attaching DAO counter-evidence for dispute on Payroll #${payrollId}...`);
+
+    try {
+      const client = getWriteClient(glAccount);
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: 'submit_counter_evidence',
+        args: [Number(payrollId), counterEvidenceUrl.trim()],
+      });
+      
+      setTxHash(hash);
+      setTxStatus('Submitting counter-evidence challenge to contract state...');
+
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      
+      const leaderReceipt = receipt.consensus_data?.leader_receipt?.[0];
+      if (leaderReceipt && leaderReceipt.execution_result === 'ERROR') {
+        const errorMsg = leaderReceipt.genvm_result?.stderr || 'Transaction error';
+        throw new Error(errorMsg);
+      }
+
+      setTxStatus('Success! Counter-evidence attached.');
+      await fetchPayrollsState();
+      return receipt;
+    } catch (err) {
+      console.error('Counter-evidence submission failed:', err);
+      setError(err.message || 'Transaction failed');
+      setTxStatus('Failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reclaim Timed Out Payroll (DAO recovers abandoned deposit)
+  const reclaimTimedOutPayroll = async (payrollId) => {
+    if (!glAccount || !CONTRACT_ADDRESS) {
+      throw new Error('Wallet not connected');
+    }
+    setLoading(true);
+    setError('');
+    setTxHash('');
+    setTxStatus(`Reclaiming locked GEN deposit via timeout recovery path for Payroll #${payrollId}...`);
+
+    try {
+      const client = getWriteClient(glAccount);
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: 'reclaim_timed_out_payroll',
+        args: [Number(payrollId)],
+      });
+      
+      setTxHash(hash);
+      setTxStatus('Executing timeout recovery path...');
+
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      
+      const leaderReceipt = receipt.consensus_data?.leader_receipt?.[0];
+      if (leaderReceipt && leaderReceipt.execution_result === 'ERROR') {
+        const errorMsg = leaderReceipt.genvm_result?.stderr || 'Transaction error';
+        throw new Error(errorMsg);
+      }
+
+      setTxStatus('Success! Escrow funds reclaimed to DAO treasury.');
+      await fetchPayrollsState();
+      return receipt;
+    } catch (err) {
+      console.error('Timeout reclaim failed:', err);
+      setError(err.message || 'Transaction failed');
+      setTxStatus('Failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Request Salary (Contributor submits proof, triggers AI Audit)
-  const requestSalary = async (payrollId, workProofUrl) => {
+  const requestSalary = async (payrollId, workProofUrl, counterEvidenceUrl = '') => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -208,12 +292,12 @@ export function useDAOGuillotine() {
       const client = getWriteClient(glAccount);
       const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
-        functionName: 'request_salary',
-        args: [Number(payrollId), workProofUrl.trim()],
+        functionName: 'request_salary_and_audit',
+        args: [Number(payrollId), workProofUrl.trim(), counterEvidenceUrl.trim()],
       });
       
       setTxHash(hash);
-      setTxStatus('Auditors are scraping your report URL, scanning deliverables, and executing AI prompt. Enforcing Core consensus. Please wait 15-30s...');
+      setTxStatus('Auditors are scraping your report URL, scanning deliverables against criteria & counter-evidence. Executing AI prompt. Please wait 15-30s...');
 
       const receipt = await client.waitForTransactionReceipt({ hash });
       
@@ -255,6 +339,8 @@ export function useDAOGuillotine() {
     connectWallet,
     fetchPayrollsState,
     createPayroll,
+    submitCounterEvidence,
+    reclaimTimedOutPayroll,
     requestSalary,
     contractAddress: CONTRACT_ADDRESS,
   };
