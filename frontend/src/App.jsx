@@ -402,6 +402,28 @@ export default function App() {
                     />
                   </div>
 
+                  <div className="form-group">
+                    <label className="form-label">AGREED ACCEPTANCE CRITERIA URL (SHARED DELIVERABLES POLICY)</label>
+                    <input 
+                      type="text" 
+                      placeholder="https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/criteria_sprint_1.txt" 
+                      value={acceptanceCriteriaUrlInput}
+                      onChange={(e) => setAcceptanceCriteriaUrlInput(e.target.value)}
+                      className="form-input"
+                    />
+                    <div style={{ marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        className="preset-btn preset-btn-cyan"
+                        style={{ padding: '4px 10px', fontSize: '11px' }}
+                        onClick={() => setAcceptanceCriteriaUrlInput('https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/criteria_sprint_1.txt')}
+                      >
+                        <Sparkles size={12} />
+                        + Fill Sprint 1 Acceptance Criteria URL
+                      </button>
+                    </div>
+                  </div>
+
                   <button type="submit" className="btn-primary" disabled={loading}>
                     {loading ? (
                       <>
@@ -536,9 +558,24 @@ export default function App() {
                               "{selectedPayroll.audit_report}"
                             </div>
 
-                            {selectedPayroll.work_proof_url && (
+                            {selectedPayroll.acceptance_criteria_url && (
                               <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>VERIFIED REPORT URL:</span>
+                                <span style={{ color: 'var(--text-muted)' }}>AGREED CRITERIA URL:</span>
+                                <a 
+                                  href={selectedPayroll.acceptance_criteria_url} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  style={{ color: 'var(--primary-cyan)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  {selectedPayroll.acceptance_criteria_url}
+                                  <ExternalLink size={12} />
+                                </a>
+                              </div>
+                            )}
+
+                            {selectedPayroll.work_proof_url && (
+                              <div style={{ marginTop: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>WORK PROOF URL:</span>
                                 <a 
                                   href={selectedPayroll.work_proof_url} 
                                   target="_blank" 
@@ -550,58 +587,99 @@ export default function App() {
                                 </a>
                               </div>
                             )}
+
+                            {selectedPayroll.counter_evidence_url && (
+                              <div style={{ marginTop: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: 'var(--rose-slash)' }}>DAO COUNTER-EVIDENCE:</span>
+                                <a 
+                                  href={selectedPayroll.counter_evidence_url} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  style={{ color: 'var(--rose-slash)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  {selectedPayroll.counter_evidence_url}
+                                  <ExternalLink size={12} />
+                                </a>
+                              </div>
+                            )}
                           </div>
                         )}
 
                         {/* Action Form */}
                         <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
-                          {selectedPayroll.status === 'ACTIVE' ? (
+                          {selectedPayroll.status === 'ACTIVE' || selectedPayroll.status === 'FAILED' ? (
                             <div>
-                              {(address.toLowerCase() === selectedPayroll.contributor.toLowerCase() || address.toLowerCase() === selectedPayroll.dao.toLowerCase()) ? (
-                                <div>
-                                  <div style={{ background: 'var(--primary-cyan-dim)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '12px', padding: '14px 18px', fontSize: '13px', color: '#A5F3FC', marginBottom: '20px' }}>
-                                    Authenticated Role Recognized // {address.toLowerCase() === selectedPayroll.contributor.toLowerCase() ? "Contributor" : "DAO Admin"}. Submit your work proof URL below to trigger AI auditing.
+                              <div>
+                                <div style={{ background: 'var(--primary-cyan-dim)', border: '1px solid rgba(0, 240, 255, 0.3)', borderRadius: '12px', padding: '14px 18px', fontSize: '13px', color: '#A5F3FC', marginBottom: '20px' }}>
+                                  Authenticated Role Recognized // Contributor or DAO Admin. Submit work proof and optional DAO counter-evidence below.
+                                </div>
+
+                                {/* Preset Fill Buttons */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                                  <button
+                                    type="button"
+                                    className="preset-btn preset-btn-cyan"
+                                    onClick={() => {
+                                      setWorkProofUrlInput('https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/mock_report_solid_work.txt');
+                                    }}
+                                  >
+                                    <Sparkles size={14} />
+                                    + Fill Solid Work Report (Payout)
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="preset-btn preset-btn-rose"
+                                    onClick={() => {
+                                      setWorkProofUrlInput('https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/mock_report_fluff_meetings.txt');
+                                    }}
+                                  >
+                                    <AlertCircle size={14} />
+                                    + Fill Fluff Meetings Report (Slash DAO)
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="preset-btn preset-btn-rose"
+                                    onClick={() => {
+                                      setCounterEvidenceUrlInput('https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/counter_evidence_bug_log.txt');
+                                    }}
+                                  >
+                                    <Shield size={14} />
+                                    + Fill DAO Dispute Report (Counter-Evidence)
+                                  </button>
+                                </div>
+
+                                <form onSubmit={handleRequestSalary}>
+                                  <div className="form-group">
+                                    <label className="form-label">CONTRIBUTOR WORK PROOF URL</label>
+                                    <input 
+                                      type="text" 
+                                      placeholder="https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/mock_report_solid_work.txt" 
+                                      value={workProofUrlInput}
+                                      onChange={(e) => setWorkProofUrlInput(e.target.value)}
+                                      className="form-input"
+                                      required
+                                    />
                                   </div>
 
-                                  {/* Preset Fill Buttons */}
-                                  <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                                    <button
-                                      type="button"
-                                      className="preset-btn preset-btn-cyan"
-                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt')}
-                                    >
-                                      <Sparkles size={14} />
-                                      + Fill Solid Work Report (Payout)
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      className="preset-btn preset-btn-rose"
-                                      onClick={() => setWorkProofUrlInput('https://daoguillotine-slasher.vercel.app/mock_report_fluff_meetings.txt')}
-                                    >
-                                      <AlertCircle size={14} />
-                                      + Fill Fluff Meetings Report (Slash & Refund DAO)
-                                    </button>
+                                  <div className="form-group">
+                                    <label className="form-label">DAO COUNTER-EVIDENCE DISPUTE URL (OPTIONAL DISPUTE CHALLENGE)</label>
+                                    <input 
+                                      type="text" 
+                                      placeholder="https://raw.githubusercontent.com/Tannpd/daoguillotine-slasher/main/public/counter_evidence_bug_log.txt" 
+                                      value={counterEvidenceUrlInput}
+                                      onChange={(e) => setCounterEvidenceUrlInput(e.target.value)}
+                                      className="form-input"
+                                    />
                                   </div>
 
-                                  <form onSubmit={handleRequestSalary}>
-                                    <div className="form-group">
-                                      <label className="form-label">WORK PROOF URL (GitHub Gist, Notion Doc, Blog Link)</label>
-                                      <input 
-                                        type="text" 
-                                        placeholder="https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt" 
-                                        value={workProofUrlInput || 'https://daoguillotine-slasher.vercel.app/mock_report_solid_work.txt'}
-                                        onChange={(e) => setWorkProofUrlInput(e.target.value)}
-                                        className="form-input"
-                                        required
-                                      />
-                                    </div>
-
-                                    <button type="submit" className="btn-primary" disabled={loading}>
+                                  <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button type="submit" className="btn-primary" disabled={loading} style={{ flex: 1 }}>
                                       {loading ? (
                                         <>
                                           <RefreshCw size={18} className="animate-spin" />
-                                          Auditing Work Report via AI Nodes...
+                                          Auditing Deliverables via AI Nodes...
                                         </>
                                       ) : (
                                         <>
@@ -610,17 +688,23 @@ export default function App() {
                                         </>
                                       )}
                                     </button>
-                                  </form>
-                                </div>
-                              ) : (
-                                <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px', background: '#0D1017', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                                  Awaiting contributor claim. Connected wallet is not a recognized party for this payroll.
-                                </div>
-                              )}
+
+                                    <button 
+                                      type="button" 
+                                      className="btn-primary" 
+                                      onClick={() => handleReclaimTimedOut(selectedPayroll.id)}
+                                      disabled={loading}
+                                      style={{ background: 'var(--rose-dim)', border: '1px solid var(--rose-slash)', color: '#FDA4AF', width: 'auto', padding: '0 20px' }}
+                                    >
+                                      Reclaim Timed Out Deposit
+                                    </button>
+                                  </div>
+                                </form>
+                              </div>
                             </div>
                           ) : (
                             <div style={{ background: '#0D1017', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'center', fontSize: '13px' }}>
-                              Dossier Finalized. Payout settled or refunded to DAO. State locked on-chain.
+                              Dossier Finalized. Payout settled, slashed, or reclaimed on-chain.
                             </div>
                           )}
                         </div>
