@@ -150,7 +150,7 @@ export function useDAOGuillotine() {
   }, []);
 
   // Create Payroll (DAO locks funds with acceptance criteria)
-  const createPayroll = async (contributorAddress, depositAmt, acceptanceCriteriaUrl = '') => {
+  const createPayroll = async (contributorAddress, depositAmt, acceptanceCriteriaUrl) => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -181,7 +181,7 @@ export function useDAOGuillotine() {
         throw new Error(errorMsg);
       }
 
-      setTxStatus('Success! Salary locked.');
+      setTxStatus('Success! Salary locked with immutable criteria.');
       await fetchPayrollsState();
       return receipt;
     } catch (err) {
@@ -194,7 +194,49 @@ export function useDAOGuillotine() {
     }
   };
 
-  // Submit Counter Evidence (DAO challenges claim)
+  // Stage 1: Submit Work Proof (Opens DAO Challenge Window)
+  const submitWorkProof = async (payrollId, workProofUrl) => {
+    if (!glAccount || !CONTRACT_ADDRESS) {
+      throw new Error('Wallet not connected');
+    }
+    setLoading(true);
+    setError('');
+    setTxHash('');
+    setTxStatus(`Submitting work proof for Payroll #${payrollId}...`);
+
+    try {
+      const client = getWriteClient(glAccount);
+      const hash = await client.writeContract({
+        address: CONTRACT_ADDRESS,
+        functionName: 'submit_work_proof',
+        args: [Number(payrollId), workProofUrl.trim()],
+      });
+      
+      setTxHash(hash);
+      setTxStatus('Filing work proof & opening DAO Challenge Window...');
+
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      
+      const leaderReceipt = receipt.consensus_data?.leader_receipt?.[0];
+      if (leaderReceipt && leaderReceipt.execution_result === 'ERROR') {
+        const errorMsg = leaderReceipt.genvm_result?.stderr || 'Contract execution error';
+        throw new Error(errorMsg);
+      }
+
+      setTxStatus('Success! Work proof submitted. Challenge Window open.');
+      await fetchPayrollsState();
+      return receipt;
+    } catch (err) {
+      console.error('Work proof submission failed:', err);
+      setError(err.message || 'Transaction failed');
+      setTxStatus('Failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit Counter Evidence (DAO challenges claim during Challenge Window)
   const submitCounterEvidence = async (payrollId, counterEvidenceUrl) => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
@@ -236,7 +278,7 @@ export function useDAOGuillotine() {
     }
   };
 
-  // Reclaim Timed Out Payroll (DAO recovers abandoned deposit)
+  // Reclaim Timed Out Payroll (DAO recovers abandoned deposit upon failed audit)
   const reclaimTimedOutPayroll = async (payrollId) => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
@@ -278,8 +320,8 @@ export function useDAOGuillotine() {
     }
   };
 
-  // Request Salary (Contributor submits proof, triggers AI Audit)
-  const requestSalary = async (payrollId, workProofUrl, counterEvidenceUrl = '') => {
+  // Request Salary & Trigger AI Audit (Locks evidence & triggers settlement)
+  const requestSalary = async (payrollId, workProofUrl = '', counterEvidenceUrl = '') => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -339,6 +381,7 @@ export function useDAOGuillotine() {
     connectWallet,
     fetchPayrollsState,
     createPayroll,
+    submitWorkProof,
     submitCounterEvidence,
     reclaimTimedOutPayroll,
     requestSalary,

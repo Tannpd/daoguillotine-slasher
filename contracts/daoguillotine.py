@@ -34,11 +34,13 @@ class Contract(gl.Contract):
     """
     DAOGuillotine
     =============
-    Holds contributor salary/bounties in escrow bound to shared acceptance criteria.
-    Before payday, contributor submits authenticated work proof URL and DAO can submit counter-evidence.
-    GenLayer AI validators cross-examine deliverables against acceptance criteria & counter-evidence.
+    Holds contributor salary/bounties in escrow bound to shared, immutable acceptance criteria.
+    Contributor submits authenticated work proof URL to open the DAO Challenge Window.
+    DAO can submit counter-evidence during the Challenge Window before AI arbitration.
+    GenLayer AI validators cross-examine deliverables against criteria & counter-evidence.
     If effort is insufficient or criteria breached (is_slashed = true), salary is slashed to DAO treasury.
-    Includes timeout recovery path allowing DAO to reclaim escrowed funds if abandoned or failed.
+    Enforces strict lifecycle guarantees: evidence replacement locking upon audit commencement,
+    immutable criteria, and failed-audit deposit reclaim protection.
     """
 
     # Monotonic payroll counter
@@ -48,10 +50,11 @@ class Contract(gl.Contract):
     payroll_dao:                      TreeMap[str, Address]
     payroll_contributor:              TreeMap[str, Address]
     payroll_amount:                   TreeMap[str, bigint]
-    payroll_status:                   TreeMap[str, str]       # "ACTIVE", "SLASHED", "PAID", "FAILED", "RECLAIMED"
-    payroll_acceptance_criteria_url:  TreeMap[str, str]       # Agreed deliverables policy URL
+    payroll_status:                   TreeMap[str, str]       # "ACTIVE", "DISPUTED", "SLASHED", "PAID", "FAILED", "RECLAIMED"
+    payroll_acceptance_criteria_url:  TreeMap[str, str]       # Shared, immutable acceptance criteria URL
     payroll_work_proof_url:           TreeMap[str, str]       # Contributor submitted proof URL
     payroll_counter_evidence_url:     TreeMap[str, str]       # DAO challenge counter-evidence URL
+    payroll_audit_opened:             TreeMap[str, bool]      # Locks evidence replacement once audit commences
     payroll_is_slashed:               TreeMap[str, bool]
     payroll_effort_score:             TreeMap[str, bigint]    # 0 to 100
     payroll_audit_report:             TreeMap[str, str]
@@ -60,15 +63,17 @@ class Contract(gl.Contract):
     # CONSTRUCTOR
     # -------------------------------------------------------------------
     def __init__(self) -> None:
+        self.escrows_count = bigint(0)
         self.payrolls_count = bigint(0)
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: CREATE PAYROLL ESCROW WITH ACCEPTANCE CRITERIA (BY DAO)
+    # PUBLIC WRITE: CREATE PAYROLL ESCROW WITH IMMUTABLE ACCEPTANCE CRITERIA
     # -------------------------------------------------------------------
     @gl.public.write.payable
-    def create_payroll(self, contributor: Address, acceptance_criteria_url: str = "") -> int:
+    def create_payroll(self, contributor: Address, acceptance_criteria_url: str) -> int:
         """
-        DAO locks native GEN tokens as salary/bounty, specifying contributor and shared acceptance criteria URL.
+        DAO locks native GEN tokens as salary/bounty, specifying contributor and shared, immutable acceptance criteria URL.
+        Acceptance criteria URL MUST be non-empty and is permanently immutable after creation.
         """
         amount = gl.message.value
         if amount <= bigint(0):
@@ -79,12 +84,12 @@ class Contract(gl.Contract):
             raise UserError("Invalid contributor address.")
 
         criteria_clean = acceptance_criteria_url.strip()
-        if len(criteria_clean) > 0:
-            crit_lower = criteria_clean.lower()
-            if not (crit_lower.startswith("http://") or crit_lower.startswith("https://")):
-                raise UserError("Invalid acceptance criteria URL format. Must start with http:// or https://")
-        else:
-            criteria_clean = "https://daoguillotine-app.vercel.app/default_acceptance_criteria.txt"
+        if len(criteria_clean) == 0:
+            raise UserError("Shared acceptance criteria URL cannot be empty. DAO must define immutable deliverables policy.")
+
+        crit_lower = criteria_clean.lower()
+        if not (crit_lower.startswith("http://") or crit_lower.startswith("https://")):
+            raise UserError("Invalid acceptance criteria URL format. Must start with http:// or https://")
 
         pid = self.payrolls_count
         pid_str = str(pid)
@@ -97,28 +102,79 @@ class Contract(gl.Contract):
         self.payroll_acceptance_criteria_url[pid_str] = criteria_clean
         self.payroll_work_proof_url[pid_str] = ""
         self.payroll_counter_evidence_url[pid_str] = ""
+        self.payroll_audit_opened[pid_str] = False
         self.payroll_is_slashed[pid_str] = False
         self.payroll_effort_score[pid_str] = bigint(0)
-        self.payroll_audit_report[pid_str] = "Awaiting claim work proof URL submission."
+        self.payroll_audit_report[pid_str] = "Payroll created. Awaiting contributor work proof URL submission."
 
         self.payrolls_count = pid + bigint(1)
         return int(pid)
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: SUBMIT COUNTER-EVIDENCE (CHALLENGE PATH BY DAO)
+    # PUBLIC WRITE: SUBMIT WORK PROOF (STAGE 1: OPENS DAO CHALLENGE WINDOW)
     # -------------------------------------------------------------------
     @gl.public.write
-    def submit_counter_evidence(self, payroll_id: int, counter_evidence_url: str) -> None:
+    def submit_work_proof(self, payroll_id: int, work_proof_url: str) -> None:
         """
-        DAO Admin attaches counter-evidence (e.g. dispute report, bug log) to challenge contributor claims.
+        Stage 1 of Dispute Lifecycle: Contributor submits work proof URL.
+        Sets status to DISPUTED and opens the DAO Challenge Window for counter-evidence submission.
         """
         pid_str = str(payroll_id)
         if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
             raise UserError("Payroll record does not exist.")
 
+        if self.payroll_audit_opened.get(pid_str, False):
+            raise UserError("Evidence replacement is locked once audit has commenced.")
+
         status = self.payroll_status.get(pid_str, "ACTIVE")
-        if status != "ACTIVE" and status != "FAILED":
-            raise UserError("Payroll is not in active or failed state for counter-evidence submission.")
+        if status != "ACTIVE":
+            raise UserError("Payroll is not in active state for work proof submission.")
+
+        sender = to_address(gl.message.sender_address)
+        contributor = to_address(self.payroll_contributor.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
+        if str(sender) != str(contributor):
+            raise UserError("Only the designated contributor can submit work proof.")
+
+        clean_url = work_proof_url.strip()
+        if len(clean_url) == 0:
+            raise UserError("Work proof URL cannot be empty.")
+
+        url_lower = clean_url.lower()
+        if not (url_lower.startswith("http://") or url_lower.startswith("https://")):
+            raise UserError("Invalid work proof URL format. Must start with http:// or https://")
+
+        if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                url_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
+                url_lower.startswith("https://github.com/") or
+                url_lower.startswith("https://raw.githubusercontent.com/") or
+                url_lower.startswith("https://gitlab.com/") or
+                url_lower.startswith("https://status.vendor.com/") or
+                url_lower.startswith("http://localhost:5173/")):
+            raise UserError("Unauthorized work proof domain origin.")
+
+        self.payroll_work_proof_url[pid_str] = clean_url
+        self.payroll_status[pid_str] = "DISPUTED"
+        self.payroll_audit_report[pid_str] = "Work proof submitted. DAO Challenge Window open for counter-evidence."
+
+    # -------------------------------------------------------------------
+    # PUBLIC WRITE: SUBMIT COUNTER-EVIDENCE (DAO CHALLENGE WINDOW)
+    # -------------------------------------------------------------------
+    @gl.public.write
+    def submit_counter_evidence(self, payroll_id: int, counter_evidence_url: str) -> None:
+        """
+        Allows DAO Admin to attach counter-evidence (dispute report, bug log) during the Challenge Window.
+        Enforces evidence replacement locking once AI audit has commenced.
+        """
+        pid_str = str(payroll_id)
+        if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
+            raise UserError("Payroll record does not exist.")
+
+        if self.payroll_audit_opened.get(pid_str, False):
+            raise UserError("Evidence replacement is locked once audit has commenced.")
+
+        status = self.payroll_status.get(pid_str, "ACTIVE")
+        if status != "ACTIVE" and status != "DISPUTED":
+            raise UserError("Payroll is not in an active or disputed state for counter-evidence submission.")
 
         sender = to_address(gl.message.sender_address)
         dao = to_address(self.payroll_dao.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
@@ -144,24 +200,28 @@ class Contract(gl.Contract):
             raise UserError("Unauthorized counter-evidence domain origin.")
 
         self.payroll_counter_evidence_url[pid_str] = clean_url
-        self.payroll_audit_report[pid_str] = "DAO counter-evidence attached. Ready for AI audit."
+        self.payroll_audit_report[pid_str] = "DAO counter-evidence attached during challenge window. Ready for AI audit."
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: REQUEST SALARY / TRIGGER AUDIT (WITH COUNTER EVIDENCE)
+    # PUBLIC WRITE: TRIGGER AI AUDIT & SETTLEMENT (STAGE 2)
     # -------------------------------------------------------------------
     @gl.public.write
-    def request_salary_and_audit(self, payroll_id: int, work_proof_url: str, counter_evidence_url: str = "") -> None:
+    def request_salary_and_audit(self, payroll_id: int, work_proof_url: str = "", counter_evidence_url: str = "") -> None:
         """
-        Contributor or DAO triggers salary audit by providing work proof URL and optional counter-evidence.
-        GenLayer AI nodes scrape acceptance criteria, work proof, and counter-evidence for cross-examination.
+        Contributor or DAO triggers salary audit resolution.
+        Locks evidence replacement permanently, then GenLayer AI nodes scrape acceptance criteria, work proof, and counter-evidence for cross-examination.
         """
         pid_str = str(payroll_id)
         if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
             raise UserError("Payroll record does not exist.")
 
+        # EVIDENCE REPLACEMENT LOCK: Reject if audit is already active/opened
+        if self.payroll_audit_opened.get(pid_str, False):
+            raise UserError("Evidence replacement is locked once audit has commenced.")
+
         status = self.payroll_status.get(pid_str, "ACTIVE")
-        if status != "ACTIVE" and status != "FAILED":
-            raise UserError("Payroll is not in active or failed state.")
+        if status != "ACTIVE" and status != "DISPUTED" and status != "FAILED":
+            raise UserError("Payroll is not in active or disputed state for audit.")
 
         # Access Control: Authenticate contributor or DAO admin
         sender = to_address(gl.message.sender_address)
@@ -171,22 +231,22 @@ class Contract(gl.Contract):
         if str(sender) != str(contributor) and str(sender) != str(dao):
             raise UserError("Only the designated contributor or DAO admin can request salary audit.")
 
-        if len(work_proof_url.strip()) == 0:
-            raise UserError("Work proof URL cannot be empty.")
+        # Update URLs if passed directly in call
+        if len(work_proof_url.strip()) > 0:
+            url_lower = work_proof_url.lower().strip()
+            if not (url_lower.startswith("http://") or url_lower.startswith("https://")):
+                raise UserError("Invalid work proof URL format. Must start with http:// or https://")
 
-        url_lower = work_proof_url.lower().strip()
-        if not (url_lower.startswith("http://") or url_lower.startswith("https://")):
-            raise UserError("Invalid work proof URL format. Must start with http:// or https://")
+            if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
+                    url_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
+                    url_lower.startswith("https://github.com/") or
+                    url_lower.startswith("https://raw.githubusercontent.com/") or
+                    url_lower.startswith("https://gitlab.com/") or
+                    url_lower.startswith("https://status.vendor.com/") or
+                    url_lower.startswith("http://localhost:5173/")):
+                raise UserError("Unauthorized work proof domain origin.")
 
-        # Domain Origin Safeguard
-        if not (url_lower.startswith("https://daoguillotine-app.vercel.app/") or
-                url_lower.startswith("https://daoguillotine-slasher.vercel.app/") or
-                url_lower.startswith("https://github.com/") or
-                url_lower.startswith("https://raw.githubusercontent.com/") or
-                url_lower.startswith("https://gitlab.com/") or
-                url_lower.startswith("https://status.vendor.com/") or
-                url_lower.startswith("http://localhost:5173/")):
-            raise UserError("Unauthorized work proof domain origin.")
+            self.payroll_work_proof_url[pid_str] = work_proof_url.strip()
 
         if len(counter_evidence_url.strip()) > 0:
             ce_lower = counter_evidence_url.lower().strip()
@@ -202,15 +262,19 @@ class Contract(gl.Contract):
                 raise UserError("Unauthorized counter-evidence domain origin.")
             self.payroll_counter_evidence_url[pid_str] = counter_evidence_url.strip()
 
-        # Update status and save work proof URL
-        self.payroll_work_proof_url[pid_str] = work_proof_url.strip()
-        self.payroll_status[pid_str] = "ACTIVE"
+        final_work_proof_url = self.payroll_work_proof_url.get(pid_str, "")
+        if len(final_work_proof_url) == 0:
+            raise UserError("Work proof URL cannot be empty before running AI audit.")
+
+        # Update status and LOCK evidence replacement permanently
+        self.payroll_status[pid_str] = "DISPUTED"
+        self.payroll_audit_opened[pid_str] = True
         self.payroll_audit_report[pid_str] = "Auditing report text. Inspecting deliverables against criteria..."
 
         acceptance_criteria_url = self.payroll_acceptance_criteria_url.get(pid_str, "")
         final_counter_evidence_url = self.payroll_counter_evidence_url.get(pid_str, "")
 
-        # Non-Deterministic Consensus Function
+        # Leader Execution Function (Direct gl.nondet calls to resolve GenLayer Linter E010)
         def leader_fn() -> str:
             # 1. Fetch Acceptance Criteria
             criteria_text = "Standard DAO Deliverables: Complete assigned tasks with tangible outputs."
@@ -223,7 +287,7 @@ class Contract(gl.Contract):
 
             # 2. Fetch Work Proof
             try:
-                raw_data = gl.nondet.web.render(work_proof_url)
+                raw_data = gl.nondet.web.render(final_work_proof_url)
                 if isinstance(raw_data, bytes):
                     text = raw_data.decode('utf-8', errors='ignore').strip()
                 else:
@@ -233,7 +297,7 @@ class Contract(gl.Contract):
                     "error": "URL_LOAD_FAILED",
                     "is_slashed": True,
                     "effort_score": 0,
-                    "audit_report": f"Auditor could not load the work report at {work_proof_url}: {str(e)}"
+                    "audit_report": f"Auditor could not load the work report at {final_work_proof_url}: {str(e)}"
                 })
 
             if len(text) < 15:
@@ -268,7 +332,7 @@ AGREED ACCEPTANCE CRITERIA:
 {excerpt_criteria}
 \"\"\"
 
-CONTRIBUTOR WORK PROOF TEXT ({work_proof_url}):
+CONTRIBUTOR WORK PROOF TEXT ({final_work_proof_url}):
 \"\"\"
 {excerpt_work}
 \"\"\"
@@ -349,12 +413,8 @@ Respond ONLY as a single valid JSON object:
                     "audit_report": f"Failed to parse AI output. Raw response: {cleaned}"
                 })
 
+        # Validator Execution Function (Direct gl.nondet calls to resolve GenLayer Linter E010)
         def validator_fn(leader_result: str) -> bool:
-            """
-            Semantic HR Validator: Enforces consensus on slashing.
-            Returns False on any leader or validator error to fail closed.
-            Requires strict JSON boolean validation.
-            """
             try:
                 leader_str = leader_result.decode('utf-8', errors='ignore') if isinstance(leader_result, bytes) else str(leader_result)
                 l_start = leader_str.find('{')
@@ -384,10 +444,10 @@ Respond ONLY as a single valid JSON object:
                 cleaned_val = val_str[v_start:v_end+1]
                 validator_data = json.loads(cleaned_val)
             except Exception:
-                return False  # Reject consensus on validator parse error
+                return False
 
             if "error" in validator_data:
-                return False  # Reject consensus if validator encountered error
+                return False
 
             # STRICT BOOLEAN CHECK FOR VALIDATOR RESULT
             val_slashed_raw = validator_data.get("is_slashed")
@@ -442,7 +502,7 @@ Respond ONLY as a single valid JSON object:
         # Reentrancy Protection
         self.payroll_amount[pid_str] = bigint(0)
 
-        # Execute payout or DAO refund using SDK account-transfer API
+        # Execute payout or DAO refund
         if is_slashed:
             # Funds returned to DAO treasury
             self.payroll_status[pid_str] = "SLASHED"
@@ -463,21 +523,21 @@ Respond ONLY as a single valid JSON object:
         self.request_salary_and_audit(payroll_id, work_proof_url, "")
 
     # -------------------------------------------------------------------
-    # PUBLIC WRITE: TIMEOUT RECOVERY PATH (BY DAO)
+    # PUBLIC WRITE: TIMEOUT RECOVERY PATH (FAILED-AUDIT CONDITION)
     # -------------------------------------------------------------------
     @gl.public.write
     def reclaim_timed_out_payroll(self, payroll_id: int) -> None:
         """
-        Allows the DAO to recover locked GEN deposit if the payroll failed audit
-        or if the contributor abandoned the claim.
+        Enables DAO admin to recover locked deposit ONLY if audit has officially failed (FAILED status).
+        Enforces a real failed-audit condition before allowing deposit recovery.
         """
         pid_str = str(payroll_id)
         if payroll_id < 0 or bigint(payroll_id) >= self.payrolls_count:
             raise UserError("Payroll record does not exist.")
 
         status = self.payroll_status.get(pid_str, "")
-        if status != "ACTIVE" and status != "FAILED":
-            raise UserError("Payroll is not in active or failed state for timeout recovery.")
+        if status != "FAILED":
+            raise UserError("Payroll funds can only be reclaimed if audit has officially failed (FAILED status).")
 
         sender = to_address(gl.message.sender_address)
         dao = to_address(self.payroll_dao.get(pid_str, Address("0x0000000000000000000000000000000000000000")))
@@ -490,7 +550,7 @@ Respond ONLY as a single valid JSON object:
 
         self.payroll_amount[pid_str] = bigint(0)
         self.payroll_status[pid_str] = "RECLAIMED"
-        self.payroll_audit_report[pid_str] = "DAO admin reclaimed escrowed funds via timeout recovery path."
+        self.payroll_audit_report[pid_str] = "DAO admin reclaimed escrowed funds following failed audit consensus."
 
         gl.get_contract_at(dao).emit_transfer(value=bigint(amount))
 
@@ -513,6 +573,7 @@ Respond ONLY as a single valid JSON object:
         crit_url = self.payroll_acceptance_criteria_url.get(pid_str, "")
         proof = self.payroll_work_proof_url.get(pid_str, "")
         counter = self.payroll_counter_evidence_url.get(pid_str, "")
+        audit_opened = bool(self.payroll_audit_opened.get(pid_str, False))
         slashed = bool(self.payroll_is_slashed.get(pid_str, False))
         score = int(self.payroll_effort_score.get(pid_str, bigint(0)))
         report = self.payroll_audit_report.get(pid_str, "")
@@ -526,6 +587,7 @@ Respond ONLY as a single valid JSON object:
             "acceptance_criteria_url": crit_url,
             "work_proof_url": proof,
             "counter_evidence_url": counter,
+            "audit_opened": audit_opened,
             "is_slashed": slashed,
             "effort_score": score,
             "audit_report": report
