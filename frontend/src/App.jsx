@@ -242,7 +242,7 @@ export default function App() {
               Stop Telegram meeting-spam, corporate fluff, and fake work. DAOGuillotine locks contributor salary/bounties in smart contracts bound to shared, immutable acceptance criteria. GenLayer AI nodes cross-examine deliverables against criteria and DAO counter-evidence, automatically slashing insufficient effort back to the DAO treasury.
             </p>
 
-            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginBottom: '50px' }}>
               <button onClick={() => setActiveTab('CREATE_PAYROLL')} className="btn-primary" style={{ width: 'auto', padding: '14px 32px', fontSize: '15px' }}>
                 <PlusCircle size={18} />
                 Lock Bounty Escrow
@@ -252,43 +252,64 @@ export default function App() {
                 Explore Active Dossiers
               </button>
             </div>
-          </div>
 
-          {/* Stats Bar */}
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-title">TOTAL VAULT VALUE LOCKED</div>
-              <div className="stat-value" style={{ color: 'var(--primary-cyan)' }}>
-                {formatGen(contractBalance)} GEN
+            {/* STUNNING 4-COLUMN HORIZONTAL STATS GRID */}
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-header">
+                  <span>VAULT VALUE LOCKED</span>
+                  <div className="stat-icon-wrapper">
+                    <Coins size={18} color="var(--primary-cyan)" />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: 'var(--primary-cyan)' }}>
+                  {formatGen(contractBalance)} GEN
+                </div>
+                <div className="stat-footer">
+                  Held in DAOGuillotine Vault
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Held in DAOGuillotine Escrow Vault
+
+              <div className="stat-card">
+                <div className="stat-header">
+                  <span>TOTAL DOSSIERS</span>
+                  <div className="stat-icon-wrapper">
+                    <FolderOpen size={18} color="#FFF" />
+                  </div>
+                </div>
+                <div className="stat-value">{payrolls.length}</div>
+                <div className="stat-footer" style={{ color: '#10B981' }}>
+                  {payrolls.filter(p => p.status === 'ACTIVE' || p.status === 'DISPUTED').length} Active Payrolls
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-header">
+                  <span>CONTRIBUTORS PAID</span>
+                  <div className="stat-icon-wrapper">
+                    <ShieldCheck size={18} color="var(--emerald-success)" />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: 'var(--emerald-success)' }}>{paidCount}</div>
+                <div className="stat-footer">
+                  Deliverables Verified
+                </div>
+              </div>
+
+              <div className="stat-card">
+                <div className="stat-header">
+                  <span>FLUFF SLASHED</span>
+                  <div className="stat-icon-wrapper">
+                    <AlertCircle size={18} color="var(--rose-slash)" />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: 'var(--rose-slash)' }}>{slashedCount}</div>
+                <div className="stat-footer" style={{ color: 'var(--rose-slash)' }}>
+                  Refreshed to Treasury
+                </div>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-title">TOTAL DOSSIERS REGISTERED</div>
-              <div className="stat-value">{payrolls.length}</div>
-              <div style={{ fontSize: '12px', color: '#10B981', marginTop: '4px' }}>
-                {payrolls.filter(p => p.status === 'ACTIVE' || p.status === 'DISPUTED').length} Active Payrolls
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-title">CONTRIBUTORS PAID</div>
-              <div className="stat-value" style={{ color: 'var(--emerald-success)' }}>{paidCount}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Tangible Deliverables Verified
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-title">FLUFF WORK SLASHED</div>
-              <div className="stat-value" style={{ color: 'var(--rose-slash)' }}>{slashedCount}</div>
-              <div style={{ fontSize: '12px', color: 'var(--rose-slash)', marginTop: '4px' }}>
-                Refreshed to DAO Treasury
-              </div>
-            </div>
           </div>
         </main>
       )}
@@ -461,12 +482,12 @@ export default function App() {
 
                         {/* Detail Info Grid */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-                          <div style={{ background: '#0D1017', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
+                          <div style={{ background: '#090C12', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>DAO SOURCE (ESCROW OWNER)</div>
                             <div style={{ fontSize: '12px', color: '#FFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{selectedPayroll.dao}</div>
                           </div>
 
-                          <div style={{ background: '#0D1017', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
+                          <div style={{ background: '#090C12', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '14px 18px' }}>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>CONTRIBUTOR RECIPIENT</div>
                             <div style={{ fontSize: '12px', color: '#FFF', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>{selectedPayroll.contributor}</div>
                           </div>
@@ -604,7 +625,7 @@ export default function App() {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                   
                                   {/* STAGE 1: SUBMIT WORK PROOF */}
-                                  <form onSubmit={handleSubmitWorkProof} style={{ background: '#0D1017', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}>
+                                  <form onSubmit={handleSubmitWorkProof} style={{ background: '#090C12', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px' }}>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary-cyan)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <FileCode size={16} />
                                       STAGE 1: SUBMIT WORK PROOF & OPEN DAO CHALLENGE WINDOW
@@ -625,7 +646,7 @@ export default function App() {
                                   </form>
 
                                   {/* STAGE 2: SUBMIT COUNTER EVIDENCE */}
-                                  <form onSubmit={handleSubmitCounterEvidence} style={{ background: '#0D1017', border: '1px dashed var(--rose-slash)', borderRadius: '12px', padding: '20px' }}>
+                                  <form onSubmit={handleSubmitCounterEvidence} style={{ background: '#090C12', border: '1px dashed var(--rose-slash)', borderRadius: '12px', padding: '20px' }}>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--rose-slash)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <Shield size={16} />
                                       DAO CHALLENGE WINDOW: SUBMIT COUNTER-EVIDENCE
@@ -676,7 +697,7 @@ export default function App() {
                               </div>
                             </div>
                           ) : (
-                            <div style={{ background: '#0D1017', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'center', fontSize: '13px' }}>
+                            <div style={{ background: '#090C12', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'center', fontSize: '13px' }}>
                               Dossier Finalized. Payout settled, slashed, or reclaimed on-chain.
                             </div>
                           )}
