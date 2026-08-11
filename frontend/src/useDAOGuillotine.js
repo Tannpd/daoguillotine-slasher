@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { createClient, createAccount } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
 
-const CONTRACT_ADDRESS = '0x0Be97369B3a37a246cE0666e4728E51Cb0877cee';
+const CONTRACT_ADDRESS = '0xf44474179A2F07deDF14C6043608dF6d7a7D978A';
 
 // Custom chain that proxies RPC through Vercel same-origin to bypass browser CORS policies
 const getRpcEndpoint = () => {
