@@ -1,7 +1,7 @@
 # DAOGuillotine // Decentralized Contributor Payout Auditor
 
 [![GenLayer v0.2.16 Compatible](https://img.shields.io/badge/GenLayer-v0.2.16-00F0FF?style=for-the-badge&logo=python)](https://genlayer.com)
-[![Build Status](https://img.shields.io/badge/Tests-7%2F7%20PASSING-10B981?style=for-the-badge)](https://github.com/Tannpd/DAOGuillotine)
+[![Build Status](https://img.shields.io/badge/Tests-10%2F10%20PASSING-10B981?style=for-the-badge)](https://github.com/Tannpd/DAOGuillotine)
 [![Live Web dApp](https://img.shields.io/badge/Vercel-LIVE%20dAPP-000000?style=for-the-badge&logo=vercel)](https://daoguillotine-app.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F43F5E?style=for-the-badge)](LICENSE)
 
@@ -27,15 +27,18 @@ python -m unittest discover -s tests -p "test_*.py" -v
 
 Output:
 ```text
+test_access_controls_for_roles ... ok
 test_create_payroll_requires_non_empty_criteria ... ok
+test_get_payroll_out_of_bounds ... ok
 test_prevent_evidence_replacement_after_audit_commences ... ok
 test_reclaim_requires_failed_audit_status ... ok
 test_reproducible_compilation ... ok
+test_slashing_path_when_effort_insufficient_or_bug_reported ... ok
 test_strict_boolean_validation_rejects_string_boolean ... ok
 test_submit_work_proof_stage1_and_challenge_window ... ok
 test_unauthorized_domain_origin_rejected ... ok
 
-Ran 7 tests in 0.007s
+Ran 10 tests in 0.007s
 OK
 ```
 

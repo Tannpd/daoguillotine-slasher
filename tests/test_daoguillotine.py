@@ -174,6 +174,46 @@ class TestDAOGuillotine(unittest.TestCase):
         self.assertTrue(payroll3["audit_opened"])
         self.assertEqual(payroll3["status"], "PAID")
 
+    def test_slashing_path_when_effort_insufficient_or_bug_reported(self):
+        """Verify insufficient effort or critical bug report slashes salary back to DAO treasury."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        crit_url = "https://daoguillotine-app.vercel.app/criteria.txt"
+        work_url = "https://daoguillotine-app.vercel.app/work.txt"
+        ce_url = "https://daoguillotine-app.vercel.app/counter_evidence_bug_log.txt"
+
+        mock_gl.message = MockMessage(sender=dao, value=4000000000000000000)
+        self.contract.create_payroll(contributor, crit_url)
+
+        # Contributor submits work proof
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.submit_work_proof(0, work_url)
+
+        # DAO submits counter-evidence challenge
+        mock_gl.message = MockMessage(sender=dao)
+        self.contract.submit_counter_evidence(0, ce_url)
+
+        mock_gl.nondet.web.url_to_content[crit_url] = "Criteria: Zero critical bugs in production code."
+        mock_gl.nondet.web.url_to_content[work_url] = "Claim: Deployed code on mainnet."
+        mock_gl.nondet.web.url_to_content[ce_url] = "DAO Dispute Report: Critical reentrancy bug found in deployed code!"
+
+        mock_gl.nondet.exec_prompt_responses = [
+            json.dumps({
+                "is_slashed": True,
+                "effort_score": 20,
+                "audit_report": "DAO counter-evidence confirmed critical bug. Salary slashed to DAO treasury."
+            })
+        ]
+
+        mock_gl.message = MockMessage(sender=contributor)
+        self.contract.request_salary_and_audit(0)
+
+        payroll = json.loads(self.contract.get_payroll(0))
+
+        self.assertTrue(payroll["is_slashed"])
+        self.assertEqual(payroll["status"], "SLASHED")
+        self.assertTrue(any(t["target"] == dao and t["value"] == 4000000000000000000 for t in mock_gl.transfers_log))
+
     def test_prevent_evidence_replacement_after_audit_commences(self):
         """Verify evidence replacement is locked once AI audit commences."""
         dao = "0x1111111111111111111111111111111111111111"
@@ -220,6 +260,31 @@ class TestDAOGuillotine(unittest.TestCase):
         self.assertEqual(payroll["status"], "RECLAIMED")
         self.assertEqual(payroll["amount"], 0)
 
+    def test_access_controls_for_roles(self):
+        """Verify access controls for contributor and DAO admin functions."""
+        dao = "0x1111111111111111111111111111111111111111"
+        contributor = "0x2222222222222222222222222222222222222222"
+        attacker = "0x9999999999999999999999999999999999999999"
+
+        mock_gl.message = MockMessage(sender=dao, value=1000000000000000000)
+        self.contract.create_payroll(contributor, "https://daoguillotine-app.vercel.app/crit.txt")
+
+        # Attacker calling submit_work_proof MUST fail
+        mock_gl.message = MockMessage(sender=attacker)
+        with self.assertRaises(daoguillotine.UserError) as ctx:
+            self.contract.submit_work_proof(0, "https://daoguillotine-app.vercel.app/work.txt")
+        self.assertIn("Only the designated contributor can submit work proof", str(ctx.exception))
+
+        # Attacker calling submit_counter_evidence MUST fail
+        with self.assertRaises(daoguillotine.UserError) as ctx:
+            self.contract.submit_counter_evidence(0, "https://daoguillotine-app.vercel.app/counter.txt")
+        self.assertIn("Only the designated DAO admin can submit counter-evidence", str(ctx.exception))
+
+        # Attacker calling reclaim_timed_out_payroll MUST fail
+        with self.assertRaises(daoguillotine.UserError) as ctx:
+            self.contract.reclaim_timed_out_payroll(0)
+        self.assertIn("Payroll funds can only be reclaimed if audit has officially failed", str(ctx.exception))
+
     def test_unauthorized_domain_origin_rejected(self):
         """Verify arbitrary un-whitelisted domain URLs are blocked for work proof."""
         dao = "0x1111111111111111111111111111111111111111"
@@ -253,6 +318,11 @@ class TestDAOGuillotine(unittest.TestCase):
 
         payroll = json.loads(self.contract.get_payroll(0))
         self.assertEqual(payroll["status"], "FAILED")
+
+    def test_get_payroll_out_of_bounds(self):
+        """Verify get_payroll returns {} for out of bounds IDs."""
+        self.assertEqual(self.contract.get_payroll(-1), "{}")
+        self.assertEqual(self.contract.get_payroll(999), "{}")
 
 if __name__ == '__main__':
     unittest.main()
