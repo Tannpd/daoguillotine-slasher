@@ -106,7 +106,7 @@ export default function App() {
     e.preventDefault();
     if (selectedPayrollId === null) return;
     try {
-      await requestSalary(selectedPayrollId, workProofUrlInput, counterEvidenceUrlInput);
+      await requestSalary(selectedPayrollId);
       setWorkProofUrlInput('');
       setCounterEvidenceUrlInput('');
     } catch (err) {

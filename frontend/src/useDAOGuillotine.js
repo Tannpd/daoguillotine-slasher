@@ -149,8 +149,8 @@ export function useDAOGuillotine() {
     }
   }, []);
 
-  // Create Payroll (DAO locks funds with acceptance criteria)
-  const createPayroll = async (contributorAddress, depositAmt, acceptanceCriteriaUrl) => {
+  // Create Payroll (DAO locks funds with acceptance criteria & deadlines)
+  const createPayroll = async (contributorAddress, depositAmt, acceptanceCriteriaUrl, challengeDeadlineTs, recoveryDeadlineTs) => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -159,6 +159,10 @@ export function useDAOGuillotine() {
     setTxHash('');
     setTxStatus(`Locking salary/bounty of ${depositAmt} GEN for contributor ${contributorAddress}...`);
 
+    const now = Math.floor(Date.now() / 1000);
+    const chDeadline = challengeDeadlineTs || (now + 86400 * 3); // 3 days default
+    const recDeadline = recoveryDeadlineTs || (now + 86400 * 7); // 7 days default
+
     try {
       const client = getWriteClient(glAccount);
       const valueWei = parseGen(depositAmt);
@@ -166,7 +170,7 @@ export function useDAOGuillotine() {
       const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_payroll',
-        args: [contributorAddress.trim(), acceptanceCriteriaUrl.trim()],
+        args: [contributorAddress.trim(), acceptanceCriteriaUrl.trim(), chDeadline, recDeadline],
         value: valueWei,
       });
       
@@ -278,8 +282,8 @@ export function useDAOGuillotine() {
     }
   };
 
-  // Reclaim Timed Out Payroll (DAO recovers abandoned deposit upon failed audit)
-  const reclaimTimedOutPayroll = async (payrollId) => {
+  // Reclaim Timed Out Payroll (DAO recovers abandoned deposit upon failed audit after recovery deadline)
+  const reclaimTimedOutPayroll = async (payrollId, timeSourceUrl = 'https://worldtimeapi.org/api/timezone/UTC') => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
@@ -293,11 +297,11 @@ export function useDAOGuillotine() {
       const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'reclaim_timed_out_payroll',
-        args: [Number(payrollId)],
+        args: [Number(payrollId), timeSourceUrl],
       });
       
       setTxHash(hash);
-      setTxStatus('Executing timeout recovery path...');
+      setTxStatus('Executing timeout recovery path with canonical time verification...');
 
       const receipt = await client.waitForTransactionReceipt({ hash });
       
@@ -320,26 +324,26 @@ export function useDAOGuillotine() {
     }
   };
 
-  // Request Salary & Trigger AI Audit (Locks evidence & triggers settlement)
-  const requestSalary = async (payrollId, workProofUrl = '', counterEvidenceUrl = '') => {
+  // Request Salary & Trigger AI Audit (Verifies challenge window closure via time oracle & triggers settlement)
+  const requestSalary = async (payrollId, timeSourceUrl = 'https://worldtimeapi.org/api/timezone/UTC') => {
     if (!glAccount || !CONTRACT_ADDRESS) {
       throw new Error('Wallet not connected');
     }
     setLoading(true);
     setError('');
     setTxHash('');
-    setTxStatus(`Submitting work report for audit. Triggering Ruthless Tech Lead assessment...`);
+    setTxStatus(`Submitting work report for audit. Verifying challenge window closure & triggering Ruthless Tech Lead assessment...`);
 
     try {
       const client = getWriteClient(glAccount);
       const hash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'request_salary_and_audit',
-        args: [Number(payrollId), workProofUrl.trim(), counterEvidenceUrl.trim()],
+        args: [Number(payrollId), timeSourceUrl],
       });
       
       setTxHash(hash);
-      setTxStatus('Auditors are scraping your report URL, scanning deliverables against criteria & counter-evidence. Executing AI prompt. Please wait 15-30s...');
+      setTxStatus('Verifying challenge window closure via time oracle, scraping report URLs, scanning deliverables against criteria & counter-evidence. Executing AI prompt. Please wait 15-30s...');
 
       const receipt = await client.waitForTransactionReceipt({ hash });
       
