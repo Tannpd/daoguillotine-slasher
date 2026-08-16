@@ -75,7 +75,7 @@ DAOGuillotine enforces 4 strict lifecycle security guarantees to prevent prematu
 ## ⚙️ Intelligent Contract API Reference
 
 ### Deployed Contract Address
-* **GenLayer StudioNet**: `0xf44474179A2F07deDF14C6043608dF6d7a7D978A`
+* **GenLayer StudioNet**: `0x4c0433a5A6588f1fA1Eeeb5F116f861ADCdd37A6`
 
 ### Public Write Functions
 
