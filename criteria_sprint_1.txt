@@ -1,0 +1,5 @@
+AGREED ACCEPTANCE CRITERIA FOR SPRINT 1:
+1. Deliver complete GenLayer v0.2.16 Intelligent Smart Contract source code.
+2. Achieve 100% automated unit test pass rate.
+3. Deploy accessible web frontend dApp on Vercel.
+4. Implement fail-closed consensus, domain origin safeguards, and strict boolean validation.
